@@ -7,34 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Expose Firebase objects to the global scope for easier access in the main script
-        window.firebase = {
-            initializeApp,
-            getAuth,
-            signInAnonymously,
-            signInWithCustomToken,
-            onAuthStateChanged,
-            getFirestore,
-            doc,
-            getDoc,
-            addDoc,
-            setDoc,
-            updateDoc,
-            deleteDoc,
-            onSnapshot,
-            collection,
-            query,
-            where,
-            getDocs,
-            writeBatch
-        };
-    </script>
     <style>
         :root {
             --primary-color: #2c3e50;
@@ -410,7 +383,7 @@
     <div class="container">
         <header>
             <h1>Sistema de Gerenciamento de Pedidos</h1>
-            <p id="user-info" style="text-align: center; font-size: 0.9em; margin-top: 10px;"></p>
+            <p id="user-info" style="text-align: center; font-size: 0.9em; margin-top: 10px;">Dados armazenados localmente no seu navegador.</p>
         </header>
 
         <ul class="nav-tabs">
@@ -460,8 +433,8 @@
             </div>
 
             <div class="alert alert-warning" style="margin-top: 20px;">
-                <strong>Atenção:</strong> Os dados são armazenados online e são persistentes.
-                Use a função "Apagar Todos os Dados" para remover permanentemente seus dados.
+                <strong>Atenção:</strong> Os dados são armazenados localmente no seu navegador. Eles não são sincronizados entre dispositivos.
+                Use a função "Apagar Todos os Dados" para remover permanentemente seus dados do navegador.
             </div>
 
             <table id="orders-table">
@@ -1060,38 +1033,28 @@
         </div>
     </div>
 
-    <script type="module">
-        // Firebase variables (will be initialized in initFirebase)
-        let app;
-        let db;
-        let auth;
-        let userId = 'anonymous'; // Default to anonymous until authenticated
-        let isAuthReady = false; // Flag to ensure Firebase is ready before operations
+    <script>
+        // Chaves para o LocalStorage
+        const STORAGE_KEYS = {
+            ORDERS: 'ordersData',
+            ACTIVITIES: 'activitiesData',
+            ATTACHMENTS: 'attachmentsData'
+        };
 
-        // Local data caches, updated by Firestore snapshots
+        // Caches de dados locais
         let ordersData = [];
         let activitiesData = [];
         let attachmentsData = [];
 
-        // Current order being viewed/edited
+        // Pedido atual sendo visualizado/editado
         let currentOrder = null;
 
-        // Global object to hold chart instances
+        // Objeto global para armazenar instâncias de gráficos
         let chartInstances = {};
 
-        // Global variables provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Firestore Collection Paths
-        const getOrdersCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/orders`);
-        const getActivitiesCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/activities`);
-        const getAttachmentsCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/attachments`);
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', async function() {
-            await initFirebase(); // Initialize Firebase first
+        // Inicializa a aplicação
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFromLocalStorage(); // Carrega os dados do localStorage ao iniciar
             setupTabs();
             initPanelTab();
             initSalesTab();
@@ -1109,165 +1072,81 @@
             setupModals();
             setupCustomAlert();
             setupCustomConfirm();
+            updateUI(); // Atualiza a UI com os dados carregados
         });
 
-        async function initFirebase() {
+        // Funções para gerenciar LocalStorage
+        function loadFromLocalStorage() {
             try {
-                app = firebase.initializeApp(firebaseConfig);
-                db = firebase.getFirestore(app);
-                auth = firebase.getAuth(app);
-
-                // Authenticate user
-                if (initialAuthToken) {
-                    await firebase.signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await firebase.signInAnonymously(auth);
-                }
-
-                // Listen for auth state changes and set userId
-                firebase.onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('user-info').textContent = `Usuário ID: ${userId}`;
-                        isAuthReady = true;
-                        // Start listening to Firestore data once authenticated
-                        setupFirestoreListeners();
-                        updateUI(); // Initial UI update after auth and listeners are set
-                    } else {
-                        userId = 'anonymous';
-                        document.getElementById('user-info').textContent = `Usuário ID: ${userId} (Anônimo)`;
-                        isAuthReady = false;
-                        // Clear local data if user logs out or is not authenticated
-                        ordersData = [];
-                        activitiesData = [];
-                        attachmentsData = [];
-                        updateUI();
-                    }
-                });
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                customAlert("Erro ao inicializar o sistema de banco de dados. Tente novamente mais tarde.");
+                ordersData = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS)) || [];
+                activitiesData = JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITIES)) || [];
+                attachmentsData = JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTACHMENTS)) || [];
+            } catch (e) {
+                console.error("Erro ao carregar dados do LocalStorage:", e);
+                customAlert("Erro ao carregar dados salvos. Seus dados podem estar corrompidos. Tente apagar todos os dados.");
+                // Limpa o localStorage para evitar loop de erro
+                localStorage.clear();
+                ordersData = [];
+                activitiesData = [];
+                attachmentsData = [];
             }
         }
 
-        function setupFirestoreListeners() {
-            // Orders Listener
-            firebase.onSnapshot(getOrdersCollection(), (snapshot) => {
-                ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                updateUI(); // Update UI whenever orders change
-            }, (error) => {
-                console.error("Error fetching orders:", error);
-                customAlert("Erro ao carregar pedidos.");
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(ordersData));
+                localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(activitiesData));
+                localStorage.setItem(STORAGE_KEYS.ATTACHMENTS, JSON.stringify(attachmentsData));
+            } catch (e) {
+                console.error("Erro ao salvar dados no LocalStorage:", e);
+                customAlert("Erro ao salvar dados. Seu navegador pode estar sem espaço ou em modo de navegação privada.");
+            }
+        }
+
+        // Funções de persistência de dados adaptadas para LocalStorage
+        async function saveOrderToStorage(order) {
+            const index = ordersData.findIndex(o => o.orderNumber === order.orderNumber);
+            if (index !== -1) {
+                ordersData[index] = order;
+            } else {
+                ordersData.push(order);
+            }
+            saveToLocalStorage();
+            updateUI(); // Atualiza a UI após salvar
+            return order;
+        }
+
+        async function deleteOrderFromStorage(orderNumber) {
+            ordersData = ordersData.filter(o => o.orderNumber !== orderNumber);
+            attachmentsData = attachmentsData.filter(a => a.orderNumber !== orderNumber);
+            activitiesData = activitiesData.filter(a => a.orderNumber !== orderNumber);
+            saveToLocalStorage();
+            updateUI(); // Atualiza a UI após deletar
+        }
+
+        async function addActivityToStorage(orderNumber, department, action) {
+            activitiesData.push({
+                id: generateId(), // Garante um ID único para a atividade
+                timestamp: new Date().toISOString(),
+                orderNumber,
+                department,
+                action
             });
-
-            // Activities Listener
-            firebase.onSnapshot(getActivitiesCollection(), (snapshot) => {
-                activitiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                updateActivityLog(); // Update activity log whenever activities change
-            }, (error) => {
-                console.error("Error fetching activities:", error);
-                customAlert("Erro ao carregar atividades.");
-            });
-
-            // Attachments Listener
-            firebase.onSnapshot(getAttachmentsCollection(), (snapshot) => {
-                attachmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                // Attachments are updated on demand for specific order views, so no global updateUI here.
-            }, (error) => {
-                console.error("Error fetching attachments:", error);
-                customAlert("Erro ao carregar anexos.");
-            });
+            saveToLocalStorage();
+            updateActivityLog(); // Atualiza o log de atividades
         }
 
-        // Save data to Firestore
-        async function saveOrderToFirestore(order) {
-            if (!isAuthReady) {
-                customAlert('Sistema não autenticado. Tente novamente.');
-                return;
-            }
-            try {
-                const orderRef = firebase.doc(getOrdersCollection(), order.orderNumber);
-                await firebase.setDoc(orderRef, order, { merge: true });
-            } catch (e) {
-                console.error("Error saving order: ", e);
-                customAlert("Erro ao salvar pedido.");
-            }
+        async function addAttachmentToStorage(attachment) {
+            attachmentsData.push(attachment);
+            saveToLocalStorage();
         }
 
-        async function deleteOrderFromFirestore(orderNumber) {
-            if (!isAuthReady) {
-                customAlert('Sistema não autenticado. Tente novamente.');
-                return;
-            }
-            try {
-                // Delete order document
-                await firebase.deleteDoc(firebase.doc(getOrdersCollection(), orderNumber));
-
-                // Delete associated attachments
-                const qAttachments = firebase.query(getAttachmentsCollection(), firebase.where("orderNumber", "==", orderNumber));
-                const attachmentDocs = await firebase.getDocs(qAttachments);
-                const batch = firebase.writeBatch(db);
-                attachmentDocs.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
-                await batch.commit();
-
-                // Delete associated activities
-                const qActivities = firebase.query(getActivitiesCollection(), firebase.where("orderNumber", "==", orderNumber));
-                const activityDocs = await firebase.getDocs(qActivities);
-                const activityBatch = firebase.writeBatch(db);
-                activityDocs.forEach(doc => {
-                    activityBatch.delete(doc.ref);
-                });
-                await activityBatch.commit();
-
-            } catch (e) {
-                console.error("Error deleting order: ", e);
-                customAlert("Erro ao excluir pedido.");
-            }
+        async function deleteAttachmentFromStorage(attachmentId) {
+            attachmentsData = attachmentsData.filter(a => a.id !== attachmentId);
+            saveToLocalStorage();
         }
 
-        async function addActivityToFirestore(orderNumber, department, action) {
-            if (!isAuthReady) return;
-            try {
-                await firebase.addDoc(getActivitiesCollection(), {
-                    timestamp: new Date().toISOString(),
-                    orderNumber,
-                    department,
-                    action
-                });
-            } catch (e) {
-                console.error("Error adding activity: ", e);
-            }
-        }
-
-        async function addAttachmentToFirestore(attachment) {
-            if (!isAuthReady) {
-                customAlert('Sistema não autenticado. Tente novamente.');
-                return;
-            }
-            try {
-                await firebase.addDoc(getAttachmentsCollection(), attachment);
-            } catch (e) {
-                console.error("Error adding attachment: ", e);
-                customAlert("Erro ao anexar arquivo.");
-            }
-        }
-
-        async function deleteAttachmentFromFirestore(attachmentId) {
-            if (!isAuthReady) {
-                customAlert('Sistema não autenticado. Tente novamente.');
-                return;
-            }
-            try {
-                await firebase.deleteDoc(firebase.doc(getAttachmentsCollection(), attachmentId));
-            } catch (e) {
-                console.error("Error deleting attachment: ", e);
-                customAlert("Erro ao excluir anexo.");
-            }
-        }
-
-        // Set up tab navigation
+        // Configura a navegação entre as abas
         function setupTabs() {
             const tabs = document.querySelectorAll('.nav-tabs a');
             tabs.forEach(tab => {
@@ -1277,10 +1156,10 @@
                     tabs.forEach(t => t.classList.remove('active'));
                     document.querySelectorAll('.tab-content').forEach(content => {
                         content.classList.remove('active');
-                        // Reset dropdowns in the tab that is becoming inactive
+                        // Redefine os dropdowns na aba que está se tornando inativa
                         content.querySelectorAll('select.form-control').forEach(select => {
-                            select.value = ''; // Clear selected option
-                            // Trigger change event to hide associated info divs
+                            select.value = ''; // Limpa a opção selecionada
+                            // Dispara evento de mudança para ocultar divs de informação associadas
                             select.dispatchEvent(new Event('change'));
                         });
                     });
@@ -1289,7 +1168,7 @@
                     const target = this.getAttribute('href');
                     document.querySelector(target).classList.add('active');
 
-                    // When a tab is activated, refresh its content if an order is selected
+                    // Quando uma aba é ativada, atualiza seu conteúdo se um pedido estiver selecionado
                     const activeSelect = document.querySelector(target + ' .form-control');
                     if (activeSelect && activeSelect.tagName === 'SELECT' && activeSelect.value) {
                         activeSelect.dispatchEvent(new Event('change'));
@@ -1300,7 +1179,7 @@
             });
         }
 
-        // Set up modals
+        // Configura os modais
         function setupModals() {
             const modals = document.querySelectorAll('.modal');
             const closeButtons = document.querySelectorAll('.close');
@@ -1320,40 +1199,40 @@
             });
         }
 
-        // Function to open a modal
+        // Função para abrir um modal
         function openModal(modalId) {
             document.getElementById(modalId).classList.add('show');
         }
 
-        // Function to close a modal
+        // Função para fechar um modal
         function closeModal(modalId) {
             const modal = document.getElementById(modalId);
             if (modal) {
                 modal.classList.remove('show');
-                // Special handling for custom alert/confirm modals
+                // Tratamento especial para modais de alerta/confirmação personalizados
                 if (modalId === 'custom-alert-modal' || modalId === 'custom-confirm-modal') {
                     modal.style.opacity = '0';
                     modal.style.pointerEvents = 'none';
-                    // Use a timeout to ensure the transition completes before setting display to 'none'
+                    // Usa um timeout para garantir que a transição seja concluída antes de definir display como 'none'
                     setTimeout(() => {
                         modal.style.display = 'none';
-                    }, 300); // Match this duration with the CSS transition duration
+                    }, 300); // Corresponder esta duração com a duração da transição CSS
                 }
             }
         }
 
-        // Custom Alert/Message Box functions
+        // Funções para a caixa de alerta/mensagem personalizada
         function setupCustomAlert() {
             document.getElementById('custom-alert-ok-button').addEventListener('click', function() {
                 closeModal('custom-alert-modal');
             });
-            // Ensure the modal is initially hidden and styled correctly
+            // Garante que o modal esteja inicialmente oculto e estilizado corretamente
             const customAlertModal = document.getElementById('custom-alert-modal');
             if (customAlertModal) {
-                customAlertModal.style.display = 'none'; // Ensure it's hidden initially
+                customAlertModal.style.display = 'none'; // Garante que esteja oculto inicialmente
                 customAlertModal.style.opacity = '0';
                 customAlertModal.style.transition = 'opacity 0.3s ease-in-out';
-                customAlertModal.style.pointerEvents = 'none'; // Allow clicks through when hidden
+                customAlertModal.style.pointerEvents = 'none'; // Permite cliques através quando oculto
             }
         }
 
@@ -1363,13 +1242,13 @@
             document.getElementById('custom-alert-message').textContent = message;
 
             if (customAlertModal) {
-                customAlertModal.style.display = 'flex'; // Use flex to center content
+                customAlertModal.style.display = 'flex'; // Usa flex para centralizar o conteúdo
                 customAlertModal.style.opacity = '1';
                 customAlertModal.style.pointerEvents = 'auto';
             }
         }
 
-        // Custom Confirm Modal functions
+        // Funções para o modal de confirmação personalizado
         let confirmOnYesCallback = null;
         let confirmOnNoCallback = null;
 
@@ -1379,8 +1258,8 @@
                     confirmOnYesCallback();
                 }
                 closeModal('custom-confirm-modal');
-                confirmOnYesCallback = null; // Clear callback
-                confirmOnNoCallback = null; // Clear callback
+                confirmOnYesCallback = null; // Limpa o callback
+                confirmOnNoCallback = null; // Limpa o callback
             });
 
             document.getElementById('custom-confirm-no-button').addEventListener('click', function() {
@@ -1388,13 +1267,13 @@
                     confirmOnNoCallback();
                 }
                 closeModal('custom-confirm-modal');
-                confirmOnYesCallback = null; // Clear callback
-                confirmOnNoCallback = null; // Clear callback
+                confirmOnYesCallback = null; // Limpa o callback
+                confirmOnNoCallback = null; // Limpa o callback
             });
 
             const customConfirmModal = document.getElementById('custom-confirm-modal');
             if (customConfirmModal) {
-                customConfirmModal.style.display = 'none'; // Ensure it's hidden initially
+                customConfirmModal.style.display = 'none'; // Garante que esteja oculto inicialmente
                 customConfirmModal.style.opacity = '0';
                 customConfirmModal.style.transition = 'opacity 0.3s ease-in-out';
                 customConfirmModal.style.pointerEvents = 'none';
@@ -1417,14 +1296,14 @@
         }
 
 
-        // Update UI based on current data
+        // Atualiza a UI com base nos dados atuais
         function updateUI() {
             updateOrdersTable();
             updateDepartmentOrderSelects();
             updateActivityLog();
         }
 
-        // Update orders table in main panel
+        // Atualiza a tabela de pedidos no painel principal
         function updateOrdersTable() {
             const tbody = document.getElementById('orders-body');
             tbody.innerHTML = '';
@@ -1467,7 +1346,7 @@
                     }
                 }
 
-                // Sorting happens after rows are added, so no need to re-apply here.
+                // A ordenação acontece depois que as linhas são adicionadas, então não há necessidade de reaplicar aqui.
                 // if (prevSortColumn !== -1) {
                 //     currentSortColumn = prevSortColumn;
                 //     sortDirection = prevSortDirection;
@@ -1518,7 +1397,7 @@
                 });
             });
 
-            // Add event listeners to buttons in the table
+            // Adiciona listeners de evento aos botões na tabela
             tbody.querySelectorAll('.view-order').forEach(button => {
                 button.addEventListener('click', function() {
                     const orderNumber = this.getAttribute('data-order');
@@ -1546,7 +1425,7 @@
             });
         }
 
-        // Update order selects in all department tabs
+        // Atualiza as seleções de pedidos em todas as abas de departamento
         function updateDepartmentOrderSelects() {
             const selects = [
                 'planning-order', 'purchasing-order', 'warehouse-order',
@@ -1580,35 +1459,17 @@
             document.getElementById('import-data').addEventListener('click', () => document.getElementById('file-import').click());
             document.getElementById('file-import').addEventListener('change', importFromExcel);
             document.getElementById('confirm-shipment').addEventListener('click', confirmShipment);
-            document.getElementById('clear-all-data').addEventListener('click', clearAllUserData); // New button for clearing data
+            document.getElementById('clear-all-data').addEventListener('click', clearAllUserData); // Botão para limpar dados
         }
 
         async function clearAllUserData() {
-            customConfirm('Tem certeza que deseja apagar TODOS os seus dados (pedidos, atividades, anexos)? Esta ação é irreversível.', 'Apagar Todos os Dados', async () => {
-                if (!isAuthReady) {
-                    customAlert('Sistema não autenticado. Tente novamente.');
-                    return;
-                }
-                try {
-                    const collectionsToClear = [
-                        getOrdersCollection(),
-                        getActivitiesCollection(),
-                        getAttachmentsCollection()
-                    ];
-
-                    for (const colRef of collectionsToClear) {
-                        const docs = await firebase.getDocs(colRef);
-                        const batch = firebase.writeBatch(db);
-                        docs.forEach(doc => {
-                            batch.delete(doc.ref);
-                        });
-                        await batch.commit();
-                    }
-                    customAlert('Todos os seus dados foram apagados com sucesso.');
-                } catch (error) {
-                    console.error("Error clearing all user data:", error);
-                    customAlert("Erro ao apagar todos os dados.");
-                }
+            customConfirm('Tem certeza que deseja apagar TODOS os seus dados (pedidos, atividades, anexos)? Esta ação é irreversível.', 'Apagar Todos os Dados', () => {
+                localStorage.clear();
+                ordersData = [];
+                activitiesData = [];
+                attachmentsData = [];
+                updateUI();
+                customAlert('Todos os seus dados foram apagados com sucesso.');
             });
         }
 
@@ -1663,9 +1524,9 @@
                     currentOrder = order;
                     infoDiv.style.display = 'block';
 
-                    // Populate products table
+                    // Preenche a tabela de produtos
                     const productsBody = document.getElementById('planning-products-body');
-                    productsBody.innerHTML = ''; // Clear previous content
+                    productsBody.innerHTML = ''; // Limpa o conteúdo anterior
                     if (order.products && order.products.length > 0) {
                         order.products.forEach(p => {
                             const row = productsBody.insertRow();
@@ -1676,10 +1537,10 @@
                         row.innerHTML = `<td colspan="3">Nenhum produto encontrado para este pedido.</td>`;
                     }
 
-                    // Populate the BOM overview table
+                    // Preenche a tabela de visão geral da BOM
                     updateBOMTable('planning-bom-body', order.bom);
 
-                    // Set dates
+                    // Define as datas
                     document.getElementById('planning-desired-date').valueAsDate =
                         order.desiredDeliveryDate ? parseDate(order.desiredDeliveryDate) : null;
 
@@ -1783,7 +1644,7 @@
                 if (!currentOrder.bom) currentOrder.bom = [];
                 currentOrder.bom.push(newItem);
                 updateBOMTable('elec-bom-body', currentOrder.bom);
-                addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', 'Novo item adicionado à lista de materiais.');
+                addActivityToStorage(currentOrder.orderNumber, 'Elétrica', 'Novo item adicionado à lista de materiais.');
             });
 
             document.getElementById('elec-add-file').addEventListener('click', () => {
@@ -1813,7 +1674,7 @@
             let orderData = orderIndex !== -1 ? { ...ordersData[orderIndex] } : {
                 orderNumber,
                 products: [],
-                bom: [], // Initialize central BOM
+                bom: [], // Inicializa a BOM central
                 mechanics: {}, electrical: {}, refrigeration: {}, assembly: {},
                 shipping: {}, logistics: {}, invoice: {}, planning: {}, purchasing: {}, warehouse: {}
             };
@@ -1828,12 +1689,12 @@
                 products
             });
 
-            await saveOrderToFirestore(orderData);
+            await saveOrderToStorage(orderData);
 
             if (orderIndex === -1) {
-                await addActivityToFirestore(orderNumber, 'Vendas', 'Pedido criado');
+                await addActivityToStorage(orderNumber, 'Vendas', 'Pedido criado');
             } else {
-                await addActivityToFirestore(orderNumber, 'Vendas', 'Pedido atualizado');
+                await addActivityToStorage(orderNumber, 'Vendas', 'Pedido atualizado');
             }
 
             customAlert(`Pedido ${orderNumber} salvo com sucesso!`);
@@ -1862,15 +1723,15 @@
                 const latestDate = new Date(Math.max(...dates.filter(d => d && !isNaN(d.getTime()))));
                 currentOrder.currentPromisedDate = latestDate.toISOString();
             } else {
-                currentOrder.currentPromisedDate = ''; // Clear if no valid dates
+                currentOrder.currentPromisedDate = ''; // Limpa se não houver datas válidas
             }
 
             if (!currentOrder.planning) currentOrder.planning = {};
             currentOrder.planning.notes = document.getElementById('planning-notes').value;
             currentOrder.planning.completed = true;
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Planejamento', 'Datas prometidas atualizadas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Planejamento', 'Datas prometidas atualizadas');
             customAlert('Dados de planejamento salvos com sucesso!');
         }
 
@@ -1887,8 +1748,8 @@
             if (!currentOrder.purchasing) currentOrder.purchasing = {};
             currentOrder.purchasing.completed = true;
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Compras', 'Lista de materiais e datas de fornecedores atualizadas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Compras', 'Lista de materiais e datas de fornecedores atualizadas');
             customAlert('Dados de compras salvos com sucesso!');
         }
 
@@ -1905,11 +1766,11 @@
             if (!currentOrder.warehouse) currentOrder.warehouse = {};
             currentOrder.warehouse.completed = true;
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Estoque', 'Níveis de estoque atualizados');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Estoque', 'Níveis de estoque atualizados');
             customAlert('Dados de estoque salvos com sucesso!');
 
-            // Re-render related tabs if active
+            // Renderiza novamente as abas relacionadas se estiverem ativas
             if (document.querySelector('#purchasing.active') || document.querySelector('#planning.active')) {
                 document.querySelector('#purchasing-order').dispatchEvent(new Event('change'));
                 document.querySelector('#planning-order').dispatchEvent(new Event('change'));
@@ -1931,7 +1792,7 @@
                     un: inputs[4].value,
                     quantidade: inputs[5].value,
                     dataPrometida: inputs[6].value,
-                    emEstoque: currentOrder.bom.find(b => b.numero === inputs[1].value)?.emEstoque || '0' // Preserve stock value
+                    emEstoque: currentOrder.bom.find(b => b.numero === inputs[1].value)?.emEstoque || '0' // Preserva o valor do estoque
                 };
 
                 if(!item.componente || !item.quantidade) {
@@ -1948,20 +1809,20 @@
             const promisedDate = document.getElementById('elec-promised-date').value;
             if (!promisedDate) { customAlert('Preencha a data prometida da Elétrica.'); return; }
 
-            currentOrder.bom = newBom; // Update BOM in currentOrder
+            currentOrder.bom = newBom; // Atualiza a BOM no currentOrder
 
             if (!currentOrder.electrical) currentOrder.electrical = {};
             Object.assign(currentOrder.electrical, {
                 days: parseInt(document.getElementById('elec-days').value) || null,
-                promisedDate: promisedDate ? new Date(promisedDate).toISOString() : '', // Ensure valid date string
+                promisedDate: promisedDate ? new Date(promisedDate).toISOString() : '', // Garante uma string de data válida
                 notes: document.getElementById('elec-notes').value,
                 completed: true
             });
 
             updateCurrentPromisedDate(currentOrder);
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', 'Lista de materiais e informações atualizadas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Elétrica', 'Lista de materiais e informações atualizadas');
             customAlert('Dados de elétrica salvos com sucesso!');
         }
 
@@ -1971,12 +1832,12 @@
 
             if (currentOrder.bom && currentOrder.bom.length > 0) {
                 customConfirm('Este pedido já possui uma lista de materiais. Deseja substituí-la?', 'Confirmação',
-                    () => { // onYes callback
+                    () => { // Callback para Sim
                         processImportBOM(file, tableBodyId, department);
                     },
-                    () => { // onNo callback
+                    () => { // Callback para Não
                         customAlert('Importação de BOM cancelada.');
-                        event.target.value = ''; // Reset input
+                        event.target.value = ''; // Reseta o input
                     }
                 );
             } else {
@@ -2016,23 +1877,23 @@
                     if(!currentOrder.purchasing) currentOrder.purchasing = {};
                     currentOrder.purchasing.completed = true;
 
-                    await saveOrderToFirestore(currentOrder);
-                    await addActivityToFirestore(currentOrder.orderNumber, department, `Lista de materiais importada: ${file.name}`);
+                    await saveOrderToStorage(currentOrder);
+                    await addActivityToStorage(currentOrder.orderNumber, department, `Lista de materiais importada: ${file.name}`);
                     customAlert(`Lista de materiais importada com sucesso! ${bom.length} itens encontrados.`);
                 } catch (error) {
-                    console.error('Error importing BOM:', error);
+                    console.error('Erro ao importar BOM:', error);
                     customAlert('Erro ao importar o arquivo. Verifique o formato do arquivo.');
                 }
             };
             reader.readAsArrayBuffer(file);
-            // event.target.value = ''; // Reset input handled in confirm callback
+            // event.target.value = ''; // Reseta o input tratado no callback de confirmação
         }
 
         function updateBOMTable(tableBodyId, bom) {
             const tbody = document.getElementById(tableBodyId);
-            tbody.innerHTML = ''; // Clear previous content
+            tbody.innerHTML = ''; // Limpa o conteúdo anterior
 
-            // Handle cases where BOM is null, undefined, or empty
+            // Lida com casos em que a BOM é nula, indefinida ou vazia
             if (!bom || bom.length === 0) {
                 const colSpan = (tableBodyId === 'elec-bom-body') ? 8 : (tableBodyId === 'warehouse-bom-body') ? 7 : 9;
                 const row = tbody.insertRow();
@@ -2058,9 +1919,9 @@
                         const itemIndex = currentOrder.bom.findIndex(i => i.numero === item.numero && i.componente === item.componente);
                         if(itemIndex > -1) {
                             currentOrder.bom.splice(itemIndex, 1);
-                            await saveOrderToFirestore(currentOrder);
-                            await addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', `Item ${item.componente} removido.`);
-                            updateBOMTable('elec-bom-body', currentOrder.bom); // Re-render table after removal
+                            await saveOrderToStorage(currentOrder);
+                            await addActivityToStorage(currentOrder.orderNumber, 'Elétrica', `Item ${item.componente} removido.`);
+                            updateBOMTable('elec-bom-body', currentOrder.bom); // Renderiza novamente a tabela após a remoção
                         }
                     });
 
@@ -2115,9 +1976,9 @@
 
         function deleteOrder(orderNumber) {
             customConfirm(`Tem certeza que deseja excluir o pedido ${orderNumber}? Esta ação não pode ser desfeita.`, 'Confirmação',
-                async () => { // onYes callback
-                    await deleteOrderFromFirestore(orderNumber);
-                    await addActivityToFirestore(orderNumber, 'Sistema', `Pedido ${orderNumber} excluído`);
+                async () => { // Callback para Sim
+                    await deleteOrderFromStorage(orderNumber);
+                    await addActivityToStorage(orderNumber, 'Sistema', `Pedido ${orderNumber} excluído`);
                     customAlert(`Pedido ${orderNumber} excluído com sucesso.`);
                 }
             );
@@ -2129,7 +1990,7 @@
 
             const sortedActivities = [...activitiesData].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-            sortedActivities.slice(0, 100).forEach(activity => { // Limit log entries for performance
+            sortedActivities.slice(0, 100).forEach(activity => { // Limita as entradas do log para desempenho
                 const entry = document.createElement('div');
                 entry.className = 'log-entry';
                 entry.innerHTML = `
@@ -2207,7 +2068,7 @@
 
             renderGanttChart('modal-gantt-chart', order);
 
-            // Make sure the modal is displayed
+            // Garante que o modal seja exibido
             openModal('order-modal');
         }
 
@@ -2275,11 +2136,11 @@
 
         async function deleteAttachment(attachmentId, orderNumber) {
             customConfirm('Tem certeza que deseja excluir este anexo?', 'Confirmação',
-                async () => { // onYes callback
+                async () => { // Callback para Sim
                     const deletedAttachment = attachmentsData.find(a => a.id === attachmentId);
-                    await deleteAttachmentFromFirestore(attachmentId);
-                    showAttachments(orderNumber); // Refresh the view
-                    await addActivityToFirestore(orderNumber, 'Sistema', `Anexo ${deletedAttachment.name} excluído`);
+                    await deleteAttachmentFromStorage(attachmentId);
+                    showAttachments(orderNumber); // Atualiza a visualização
+                    await addActivityToStorage(orderNumber, 'Sistema', `Anexo ${deletedAttachment.name} excluído`);
                     customAlert(`Anexo "${deletedAttachment.name}" excluído com sucesso.`);
                 }
             );
@@ -2334,35 +2195,35 @@
             XLSX.writeFile(wb, 'pedidos_exportados.xlsx');
         }
 
-        function parseDate(dateStr) {
-            if (!dateStr) return null;
-            // If already a Date object, return it
-            if (dateStr instanceof Date && !isNaN(dateStr)) return dateStr;
+        function parseDate(dateString) {
+            if (!dateString) return null;
+            // Se já for um objeto Date, retorna-o
+            if (dateString instanceof Date && !isNaN(dateString)) return dateString;
 
-            // Handle Excel numeric date (days since 1900)
-            if (typeof dateStr === 'number') {
-                return new Date(Math.round((dateStr - 25569) * 86400 * 1000));
+            // Lida com data numérica do Excel (dias desde 1900)
+            if (typeof dateString === 'number') {
+                return new Date(Math.round((dateString - 25569) * 86400 * 1000));
             }
 
-            if (typeof dateStr !== 'string') return null;
+            if (typeof dateString !== 'string') return null;
 
-            // Try to parse as ISO string first (from Firestore)
-            const isoDate = new Date(dateStr);
+            // Tenta analisar como string ISO primeiro (do LocalStorage)
+            const isoDate = new Date(dateString);
             if (!isNaN(isoDate.getTime())) return isoDate;
 
-            // Handle Brazilian date format (dd/mm/yyyy)
-            let parts = dateStr.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})$/);
+            // Lida com formato de data brasileiro (dd/mm/yyyy)
+            let parts = dateString.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})$/);
             if (parts) {
                 const day = parseInt(parts[1], 10);
-                const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed
+                const month = parseInt(parts[2], 10) - 1; // Mês é baseado em 0
                 let year = parseInt(parts[3], 10);
-                if (year < 100) year += 2000; // Handle 2-digit years
-                const date = new Date(Date.UTC(year, month, day)); // Use UTC to avoid timezone issues
+                if (year < 100) year += 2000; // Lida com anos de 2 dígitos
+                const date = new Date(Date.UTC(year, month, day)); // Usa UTC para evitar problemas de fuso horário
                 if (!isNaN(date.getTime())) return date;
             }
 
-            // Fallback to generic Date constructor
-            const genericDate = new Date(dateStr);
+            // Fallback para o construtor Date genérico
+            const genericDate = new Date(dateString);
             if (!isNaN(genericDate.getTime())) return genericDate;
 
             return null;
@@ -2374,17 +2235,17 @@
             if (!file) return;
 
             customConfirm('Deseja importar os dados do Excel? Pedidos duplicados serão ignorados.', 'Importar Dados',
-                () => { // onYes callback
+                () => { // Callback para Sim
                     processImportFromExcel(file);
                 },
-                () => { // onNo callback
+                () => { // Callback para Não
                     customAlert('Importação de dados cancelada.');
-                    event.target.value = ''; // Reset input
+                    event.target.value = ''; // Reseta o input
                 }
             );
         }
 
-        async function processImportFromExcel(file) {
+       async function processImportFromExcel(file) {
             const reader = new FileReader();
             reader.onload = async function(e) {
                 let importedCount = 0, skippedCount = 0;
@@ -2393,8 +2254,6 @@
                     const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-                    const batch = firebase.writeBatch(db);
 
                     for (const item of jsonData) {
                         try {
@@ -2406,7 +2265,7 @@
 
                             const parsedOrderDate = parseDate(item['Data Pedido']);
                             if (!parsedOrderDate) {
-                                console.warn(`Skipping row due to invalid 'Data Pedido' for order ${orderNumber}.`);
+                                console.warn(`Pulando linha devido a 'Data Pedido' inválida para o pedido ${orderNumber}.`);
                                 skippedCount++;
                                 continue;
                             }
@@ -2426,23 +2285,22 @@
                                 purchasing: {}, warehouse: {}
                             };
 
-                            const orderRef = firebase.doc(getOrdersCollection(), newOrder.orderNumber);
-                            batch.set(orderRef, newOrder);
-                            await addActivityToFirestore(newOrder.orderNumber, 'Sistema', 'Pedido importado');
+                            ordersData.push(newOrder);
+                            await addActivityToStorage(newOrder.orderNumber, 'Sistema', 'Pedido importado');
                             importedCount++;
                         } catch (rowError) {
-                            console.error(`Error processing row:`, rowError);
+                            console.error(`Erro ao processar linha:`, rowError);
                             skippedCount++;
                         }
                     }
-                    await batch.commit();
 
+                    saveToLocalStorage();
+                    customAlert(`Importação concluída.\n${importedCount} novos pedidos importados.\n${skippedCount} pedidos ignorados (inválidos, duplicados ou com erros).`);
                 } catch (fileError) {
-                    console.error('Error importing Excel file:', fileError);
+                    console.error('Erro ao importar arquivo Excel:', fileError);
                     customAlert('Erro ao importar o arquivo. Verifique o formato do arquivo.');
                     return;
                 }
-                customAlert(`Importação concluída.\n${importedCount} novos pedidos importados.\n${skippedCount} pedidos ignorados (inválidos, duplicados ou com erros).`);
             };
             reader.readAsArrayBuffer(file);
         }
@@ -2507,7 +2365,7 @@
             if(!currentOrder[dept.id]) currentOrder[dept.id] = {};
 
             currentOrder[dept.id].days = parseInt(document.getElementById(`${dept.id}-days`).value) || null;
-            currentOrder[dept.id].promisedDate = promisedDate ? new Date(promisedDate).toISOString() : ''; // Ensure valid date string
+            currentOrder[dept.id].promisedDate = promisedDate ? new Date(promisedDate).toISOString() : ''; // Garante uma string de data válida
             currentOrder[dept.id].notes = document.getElementById(`${dept.id}-notes`).value;
             currentOrder[dept.id].completed = true;
 
@@ -2515,11 +2373,11 @@
 
             if(dept.id === 'assembly' && ['mechanics', 'electrical', 'refrigeration', 'assembly'].every(d => currentOrder[d]?.completed)) {
                 currentOrder.dateReady = new Date().toISOString();
-                await addActivityToFirestore(currentOrder.orderNumber, 'Montagem', 'Pronto para expedição');
+                await addActivityToStorage(currentOrder.orderNumber, 'Montagem', 'Pronto para expedição');
             }
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, dept.name, 'Informações atualizadas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, dept.name, 'Informações atualizadas');
             customAlert(`Dados de ${dept.name} salvos com sucesso!`);
         }
 
@@ -2530,11 +2388,11 @@
         function updateCurrentPromisedDate(order) {
             const departmentDates = ['mechanics', 'electrical', 'refrigeration', 'assembly']
                 .map(d => order[d]?.promisedDate ? parseDate(order[d].promisedDate) : null)
-                .filter(d => d && !isNaN(d.getTime())); // Filter out invalid dates
+                .filter(d => d && !isNaN(d.getTime())); // Filtra datas inválidas
 
             const planningDates = [
                 order.firstPromisedDate, order.secondPromisedDate, order.thirdPromisedDate
-            ].filter(d => d).map(d => parseDate(d)).filter(d => d && !isNaN(d.getTime())); // Filter out invalid dates
+            ].filter(d => d).map(d => parseDate(d)).filter(d => d && !isNaN(d.getTime())); // Filtra datas inválidas
 
             const allDates = [...departmentDates, ...planningDates];
 
@@ -2542,7 +2400,7 @@
                 const latestDate = new Date(Math.max.apply(null, allDates));
                 order.currentPromisedDate = latestDate.toISOString();
             } else {
-                order.currentPromisedDate = ''; // Clear if no valid dates
+                order.currentPromisedDate = ''; // Limpa se não houver datas válidas
             }
         }
 
@@ -2593,13 +2451,13 @@
         }
 
         let currentSortColumn = -1;
-        let sortDirection = 1; // 1 for ascending, -1 for descending
+        let sortDirection = 1; // 1 para ascendente, -1 para descendente
 
         function sortTable(columnIndex) {
             const tbody = document.getElementById('orders-body');
             const rows = Array.from(tbody.querySelectorAll('tr'));
 
-            // Toggle direction if clicking the same column
+            // Alterna a direção se clicar na mesma coluna
             if (currentSortColumn === columnIndex) {
                 sortDirection *= -1;
             } else {
@@ -2607,14 +2465,14 @@
                 sortDirection = 1;
             }
 
-            // Update header arrows
+            // Atualiza as setas do cabeçalho
             updateSortHeaders(columnIndex);
 
             rows.sort((a, b) => {
                 const aValue = a.cells[columnIndex].textContent.trim();
                 const bValue = b.cells[columnIndex].textContent.trim();
 
-                // Special handling for date columns (1,2,4,5,8,9)
+                // Tratamento especial para colunas de data (1,2,4,5,8,9)
                 if ([1, 2, 4, 5, 8, 9].includes(columnIndex)) {
                     const aDate = parseDateFromDisplay(aValue);
                     const bDate = parseDateFromDisplay(bValue);
@@ -2625,43 +2483,43 @@
                     return 0;
                 }
 
-                // Special handling for numeric columns (6) - Note: in the original, this was 'Dias Atraso', which is not a direct column in the new table. Re-evaluate if needed.
-                // For now, assuming column 6 is not numeric for sorting.
+                // Tratamento especial para colunas numéricas (6) - Nota: no original, esta era 'Dias Atraso', que não é uma coluna direta na nova tabela. Reavaliar se necessário.
+                // Por enquanto, assumindo que a coluna 6 não é numérica para ordenação.
                 // if (columnIndex === 6) {
                 //     const aNum = parseFloat(aValue) || 0;
                 //     const bNum = parseFloat(bValue) || 0;
                 //     return (aNum - bNum) * sortDirection;
                 // }
 
-                // Default string comparison
+                // Comparação de string padrão
                 return aValue.localeCompare(bValue) * sortDirection;
             });
 
-            // Rebuild the table
+            // Reconstrói a tabela
             tbody.innerHTML = '';
             rows.forEach(row => tbody.appendChild(row));
         }
 
-        function parseDateFromDisplay(dateStr) {
-            if (!dateStr || dateStr === '-') return null;
+        function parseDateFromDisplay(dateString) {
+            if (!dateString || dateString === '-') return null;
 
-            // Handle Brazilian date format (dd/mm/yyyy)
-            const parts = dateStr.split('/');
+            // Lida com formato de data brasileiro (dd/mm/yyyy)
+            const parts = dateString.split('/');
             if (parts.length === 3) {
                 return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
             }
 
-            return new Date(dateStr);
+            return new Date(dateString);
         }
 
         function updateSortHeaders(activeColumn) {
             const headers = document.querySelectorAll('#orders-table th');
 
             headers.forEach((header, index) => {
-                // Remove all arrows
+                // Remove todas as setas
                 header.innerHTML = header.innerHTML.replace(/ ▲| ▼/g, '');
 
-                // Add arrow to active column
+                // Adiciona seta à coluna ativa
                 if (index === activeColumn) {
                     header.innerHTML += sortDirection === 1 ? ' ▲' : ' ▼';
                 }
@@ -2692,8 +2550,8 @@
                 completed: packages.length > 0
             };
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Expedição', 'Informações de expedição salvas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Expedição', 'Informações de expedição salvas');
             customAlert('Dados de expedição salvos com sucesso!');
         }
 
@@ -2715,8 +2573,8 @@
             currentOrder.shipping.completed = true;
 
             closeModal('shipment-modal');
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Expedição', `Enviado via ${carrier}`);
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Expedição', `Enviado via ${carrier}`);
             customAlert('Envio confirmado com sucesso!');
         }
 
@@ -2773,8 +2631,8 @@
             currentOrder.freightCompany = carrier;
             currentOrder.freightCost = isNaN(cost) ? 0 : cost;
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Logística', 'Informações de logística salvas');
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Logística', 'Informações de logística salvas');
             customAlert('Dados de logística salvos com sucesso!');
         }
 
@@ -2840,8 +2698,8 @@
             currentOrder.invoiceNumber = invoiceNumber;
             currentOrder.invoice = { completed: true, notes: `Fatura ${invoiceNumber}` };
 
-            await saveOrderToFirestore(currentOrder);
-            await addActivityToFirestore(currentOrder.orderNumber, 'Faturamento', `Fatura ${invoiceNumber} salva.`);
+            await saveOrderToStorage(currentOrder);
+            await addActivityToStorage(currentOrder.orderNumber, 'Faturamento', `Fatura ${invoiceNumber} salva.`);
             customAlert('Dados de faturamento salvos com sucesso!');
         }
 
@@ -2858,16 +2716,16 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
 
-            // Destroy existing chart instance if it exists
+            // Destrói a instância do gráfico existente, se houver
             if (chartInstances[canvasId]) {
                 chartInstances[canvasId].destroy();
-                chartInstances[canvasId] = null; // Clear the reference
+                chartInstances[canvasId] = null; // Limpa a referência
             }
 
             const tasks = [];
             const orderStartDate = parseDate(order.orderDate);
 
-            // Ensure orderStartDate is a valid Date object
+            // Garante que orderStartDate seja um objeto Date válido
             if (!orderStartDate || isNaN(orderStartDate.getTime())) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.font = '16px "Segoe UI"'; ctx.fillStyle = '#6c757d'; ctx.textAlign = 'center';
@@ -2876,18 +2734,18 @@
             }
 
             const desiredDate = parseDate(order.desiredDeliveryDate);
-            // Ensure desiredDate is a valid Date object before adding to tasks
+            // Garante que desiredDate seja um objeto Date válido antes de adicionar às tarefas
             if (desiredDate && !isNaN(desiredDate.getTime()) && desiredDate >= orderStartDate) {
                 tasks.push({ name: 'Prazo Vendas', start: orderStartDate, end: desiredDate, color: 'rgba(54, 162, 235, 0.7)' });
             }
 
             ['mechanics', 'electrical', 'refrigeration', 'assembly'].forEach(id => {
                 const promisedDate = parseDate(order[id]?.promisedDate);
-                // Ensure promisedDate is a valid Date object before adding to tasks
+                // Garante que promisedDate seja um objeto Date válido antes de adicionar às tarefas
                 if (promisedDate && !isNaN(promisedDate.getTime()) && promisedDate >= orderStartDate) {
                     const name = {mechanics: 'Mecânica', electrical: 'Elétrica', refrigeration: 'Refrigeração', assembly: 'Montagem'}[id];
-                    // For single point dates, create a small duration for visibility
-                    const endDate = new Date(promisedDate.getTime() + (24 * 60 * 60 * 1000)); // Add 1 day for visibility
+                    // Para datas de ponto único, cria uma pequena duração para visibilidade
+                    const endDate = new Date(promisedDate.getTime() + (24 * 60 * 60 * 1000)); // Adiciona 1 dia para visibilidade
                     tasks.push({ name: `Prazo ${name}`, start: promisedDate, end: endDate, color: 'rgba(255, 99, 132, 0.7)' });
                 }
             });
@@ -2920,8 +2778,8 @@
                                     day: 'dd/MM'
                                 }
                             },
-                            min: Math.min(...tasks.map(t => t.start.getTime())) - (24 * 60 * 60 * 1000 * 5), // Add buffer
-                            max: Math.max(...tasks.map(t => t.end.getTime())) + (24 * 60 * 60 * 1000 * 5) // Add buffer
+                            min: Math.min(...tasks.map(t => t.start.getTime())) - (24 * 60 * 60 * 1000 * 5), // Adiciona buffer
+                            max: Math.max(...tasks.map(t => t.end.getTime())) + (24 * 60 * 60 * 1000 * 5) // Adiciona buffer
                         }
                     },
                     plugins: { legend: { display: false }}
@@ -2958,25 +2816,25 @@
             const reader = new FileReader();
             reader.onload = async function(e) {
                 const attachment = {
-                    id: generateId(), // Firestore will generate its own ID, but this is for local reference
+                    id: generateId(),
                     orderNumber: currentOrder.orderNumber,
                     department,
                     name: file.name,
                     type: fileType,
                     size: file.size,
                     date: new Date().toISOString(),
-                    data: e.target.result // Base64 encoded file data
+                    data: e.target.result // Dados do arquivo codificados em Base64
                 };
 
-                await addAttachmentToFirestore(attachment);
+                await addAttachmentToStorage(attachment);
 
                 showAttachmentsForOrder(containerId, currentOrder.orderNumber, department);
 
-                await addActivityToFirestore(currentOrder.orderNumber, department, `Anexo: ${file.name}`);
+                await addActivityToStorage(currentOrder.orderNumber, department, `Anexo: ${file.name}`);
                 customAlert(`Arquivo "${file.name}" anexado com sucesso!`);
             };
             reader.readAsDataURL(file);
-            event.target.value = ''; // Clear the file input
+            event.target.value = ''; // Limpa o input do arquivo
         }
     </script>
 </body>
