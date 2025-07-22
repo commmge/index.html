@@ -1,0 +1,2983 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gerenciamento de Pedidos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Expose Firebase objects to the global scope for easier access in the main script
+        window.firebase = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken,
+            onAuthStateChanged,
+            getFirestore,
+            doc,
+            getDoc,
+            addDoc,
+            setDoc,
+            updateDoc,
+            deleteDoc,
+            onSnapshot,
+            collection,
+            query,
+            where,
+            getDocs,
+            writeBatch
+        };
+    </script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-color: #ecf0f1;
+            --dark-color: #34495e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            list-style: none;
+            background-color: var(--dark-color);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .nav-tabs li {
+            flex: 1;
+            text-align: center;
+        }
+
+        .nav-tabs li a {
+            display: block;
+            padding: 15px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tabs li a:hover, .nav-tabs li a.active {
+            background-color: var(--secondary-color);
+        }
+
+        .order-link {
+            color: var(--secondary-color);
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .order-link:hover {
+            text-decoration: underline;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 10px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background-color: #34495e;
+            border-left: 4px solid #3498db;
+        }
+
+        .nav-link i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .tab-content {
+            display: none;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 7px 15px;
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+        }
+
+        .btn-success:hover {
+            background-color: #219653;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+        }
+
+        .btn-warning:hover {
+            background-color: #d35400;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: px;
+        }
+
+        table th, table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-size: 12px;
+        }
+
+        table th {
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 14px;
+        }
+
+        table tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .status-pending {
+            background-color: #fff3cd;
+        }
+
+        .status-delayed {
+            background-color: #f8d7da;
+        }
+
+        .status-completed {
+            background-color: #d4edda;
+        }
+
+        .status-normal {
+            background-color: white;
+        }
+
+        .filter-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .filter-item {
+            flex: 1;
+            min-width: 200px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.show {
+            display: block;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .attachments-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .attachment-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            width: calc(33% - 10px);
+            min-width: 200px;
+        }
+
+        .attachment-actions {
+            margin-top: 5px;
+        }
+
+        .gantt-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 20px;
+            height: 300px; /* Give the container a fixed height */
+            position: relative;
+        }
+
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        @media (max-width: 768px) {
+            .nav-tabs {
+                flex-direction: column;
+            }
+
+            .filter-item {
+                flex: 100%;
+                margin-right: 0;
+            }
+
+            .attachment-item {
+                width: 100%;
+            }
+        }
+
+        /* Custom Alert/Message Box Styles */
+        .custom-alert-modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1001; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+
+        .custom-alert-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 400px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .custom-alert-content h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+
+        .custom-alert-content p {
+            margin-bottom: 20px;
+        }
+
+        .custom-alert-content button {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        .custom-alert-content button:hover {
+            background-color: #2980b9;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sistema de Gerenciamento de Pedidos</h1>
+            <p id="user-info" style="text-align: center; font-size: 0.9em; margin-top: 10px;"></p>
+        </header>
+
+        <ul class="nav-tabs">
+            <li><a href="#panel" class="active">Painel Principal</a></li>
+            <li><a href="#sales">Vendas</a></li>
+            <li><a href="#planning">Planejamento</a></li>
+            <li><a href="#purchasing">Compras</a></li>
+            <li><a href="#warehouse">Estoque</a></li>
+            <li><a href="#mechanics">Mecânica</a></li>
+            <li><a href="#electrical">Elétrica</a></li>
+            <li><a href="#refrigeration">Refrigeração</a></li>
+            <li><a href="#assembly">Montagem</a></li>
+            <li><a href="#shipping">Expedição</a></li>
+            <li><a href="#logistics">Logística</a></li>
+            <li><a href="#invoice">Faturamento</a></li>
+            <li><a href="#gantt">Gráfico de Processo</a></li>
+        </ul>
+
+        <div id="panel" class="tab-content active">
+            <div class="filter-container">
+                <div class="filter-row">
+                    <div class="filter-item">
+                        <label for="filter-order">Número do Pedido</label>
+                        <input type="text" id="filter-order" class="form-control" placeholder="Filtrar por número">
+                    </div>
+                    <div class="filter-item">
+                        <label for="filter-customer">Cliente</label>
+                        <input type="text" id="filter-customer" class="form-control" placeholder="Filtrar por cliente">
+                    </div>
+                    <div class="filter-item">
+                        <label for="filter-status">Status</label>
+                        <select id="filter-status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="pending">Pendente</option>
+                            <option value="in-progress">Em Andamento</option>
+                            <option value="completed">Concluído</option>
+                            <option value="delayed">Atrasado</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="apply-filter" class="btn">Aplicar Filtro</button>
+                <button id="reset-filter" class="btn btn-warning">Limpar Filtro</button>
+                <button id="export-data" class="btn btn-success">Exportar para Excel</button>
+                <button id="import-data" class="btn">Importar do Excel</button>
+                <input type="file" id="file-import" style="display: none;" accept=".xlsx,.xls">
+                <button id="clear-all-data" class="btn btn-danger">Apagar Todos os Dados</button>
+            </div>
+
+            <div class="alert alert-warning" style="margin-top: 20px;">
+                <strong>Atenção:</strong> Os dados são armazenados online e são persistentes.
+                Use a função "Apagar Todos os Dados" para remover permanentemente seus dados.
+            </div>
+
+            <table id="orders-table">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">Nº Pedido </th>
+                        <th onclick="sortTable(1)">Data Pedido </th>
+                        <th onclick="sortTable(2)">Data Desejada </th>
+                        <th onclick="sortTable(3)">Cliente </th>
+                        <th onclick="sortTable(7)">Pendências </th>
+                        <th onclick="sortTable(8)">Data Pronto </th>
+                        <th onclick="sortTable(9)">Data Expedição </th>
+                        <th onclick="sortTable(10)">Nº Fatura </th>
+                        <th onclick="sortTable(11)">Transportadora </th>
+                        <th onclick="sortTable(12)">Rastreamento </th>
+                        <th>Anexos</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-body">
+                </tbody>
+            </table>
+
+            <div class="log-container" id="activity-log">
+                <h3>Registro de Atividades</h3>
+                <div id="log-entries">
+                </div>
+            </div>
+        </div>
+
+        <div id="sales" class="tab-content">
+            <h2>Informações de Vendas</h2>
+            <div class="form-group">
+                <label for="sales-order">Número do Pedido</label>
+                <input type="text" id="sales-order" class="form-control" placeholder="Digite o número do pedido">
+            </div>
+            <div class="form-group">
+                <label for="sales-customer">Cliente</label>
+                <input type="text" id="sales-customer" class="form-control" placeholder="Nome do cliente">
+            </div>
+            <div class="form-group">
+                <label for="sales-address">Endereço de Entrega</label>
+                <input type="text" id="sales-address" class="form-control" placeholder="Endereço completo">
+            </div>
+            <div class="form-group">
+                <label for="sales-city">Cidade</label>
+                <input type="text" id="sales-city" class="form-control" placeholder="Cidade">
+            </div>
+            <div class="form-group">
+                <label for="sales-cep">CEP</label>
+                <input type="text" id="sales-cep" class="form-control" placeholder="CEP">
+            </div>
+            <div class="form-group">
+                <label for="sales-date">Data do Pedido</label>
+                <input type="date" id="sales-date" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="sales-desired-date">Data de Entrega Desejada</label>
+                <input type="date" id="sales-desired-date" class="form-control">
+            </div>
+
+            <div id="sales-products">
+                <h3>Produtos</h3>
+                <div class="form-group">
+                    <button id="add-product" class="btn">Adicionar Produto</button>
+                </div>
+                <table id="products-table">
+                    <thead>
+                        <tr>
+                            <th>PN</th>
+                            <th>Descrição</th>
+                            <th>Quantidade</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="products-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-group">
+                <label>Anexos</label>
+                <div class="attachments-container" id="sales-attachments">
+                </div>
+                <button id="sales-add-ft" class="btn">Anexar FT (Excel)</button>
+                <button id="sales-add-desc" class="btn">Anexar Descrição (PDF)</button>
+                <button id="sales-add-other" class="btn">Anexar Outro Arquivo</button>
+                <input type="file" id="sales-ft-file" style="display: none;" accept=".xlsx,.xls">
+                <input type="file" id="sales-desc-file" style="display: none;" accept=".pdf">
+                <input type="file" id="sales-other-file" style="display: none;">
+            </div>
+
+            <button id="sales-save" class="btn btn-success">Salvar</button>
+        </div>
+
+
+
+        <div id="planning" class="tab-content">
+            <h2>Planejamento</h2>
+
+            <div class="form-group">
+                <label for="planning-order">Selecione o Pedido</label>
+                <select id="planning-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+
+            <div id="planning-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="planning-desired-date">Data Desejada (Vendas)</label>
+                    <input type="date" id="planning-desired-date" class="form-control" readonly>
+                </div>
+
+                <h3>Produtos</h3>
+                <table id="planning-products-table">
+                    <thead>
+                        <tr>
+                            <th>PN</th>
+                            <th>Descrição</th>
+                            <th>Quantidade</th>
+                        </tr>
+                    </thead>
+                    <tbody id="planning-products-body"></tbody>
+                </table>
+
+                <h3 style="margin-top: 20px;">Lista de Materiais (Visão Geral)</h3>
+                <table id="planning-bom-table">
+                    <thead>
+                        <tr>
+                            <th>Nivel</th>
+                            <th>N°</th>
+                            <th>Componente</th>
+                            <th>Descrição</th>
+                            <th>UN</th>
+                            <th>Qtd. Necessária</th>
+                            <th>Em Estoque</th>
+                            <th>Qtd. Sugerida Compra</th>
+                            <th>Data Prometida Fornecedor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="planning-bom-body"></tbody>
+                </table>
+
+                <div class="form-group" style="margin-top: 20px;">
+                    <label for="planning-first-promised">Primeira Data Prometida</label>
+                    <input type="date" id="planning-first-promised" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="planning-second-promised">Segunda Data Prometida</label>
+                    <input type="date" id="planning-second-promised" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="planning-third-promised">Terceira Data Prometida</label>
+                    <input type="date" id="planning-third-promised" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="planning-current-promised">Data Prometida Atual</label>
+                    <input type="date" id="planning-current-promised" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="planning-notes">Observações</label>
+                    <textarea id="planning-notes" class="form-control" rows="3"></textarea>
+                </div>
+                <button id="planning-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+        <div id="purchasing" class="tab-content">
+            <h2>Compras</h2>
+            <div class="form-group">
+                <label for="purchasing-order">Selecione o Pedido</label>
+                <select id="purchasing-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="purchasing-order-info" style="display: none;">
+                <div class="form-group">
+                    <button id="purchasing-import-bom" class="btn">Importar Lista de Materiais</button>
+                    <input type="file" id="purchasing-bom-file" style="display: none;" accept=".xlsx,.xls">
+                </div>
+
+                <h3>Lista de Materiais</h3>
+                <table id="purchasing-bom-table">
+                    <thead>
+                        <tr>
+                            <th>Nivel</th>
+                            <th>N°</th>
+                            <th>Componente</th>
+                            <th>Descrição</th>
+                            <th>UN</th>
+                            <th>Qtd. Necessária</th>
+                            <th>Em Estoque</th>
+                            <th>Qtd. Sugerida Compra</th>
+                            <th>Data Prometida Fornecedor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="purchasing-bom-body"></tbody>
+                </table>
+                <button id="purchasing-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+
+
+
+        <div id="warehouse" class="tab-content">
+            <h2>Estoque</h2>
+            <div class="form-group">
+                <label for="warehouse-order">Selecione o Pedido</label>
+                <select id="warehouse-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="warehouse-order-info" style="display: none;">
+
+                <h3>Lista de Materiais</h3>
+                <table id="warehouse-bom-table">
+                    <thead>
+                        <tr>
+                            <th>Nivel</th>
+                            <th>N°</th>
+                            <th>Componente</th>
+                            <th>Descrição</th>
+                            <th>UN</th>
+                            <th>Qtd. Necessária</th>
+                            <th>Em Estoque</th>
+                        </tr>
+                    </thead>
+                    <tbody id="warehouse-bom-body"></tbody>
+                </table>
+                <button id="warehouse-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+
+
+        <div id="mechanics" class="tab-content">
+            <h2>Engenharia Mecânica</h2>
+            <div class="form-group">
+                <label for="mech-order">Selecione o Pedido</label>
+                <select id="mech-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="mech-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="mech-days">Dias para Conclusão</label>
+                    <input type="number" id="mech-days" class="form-control" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="mech-promised-date">Data Prometida</label>
+                    <input type="date" id="mech-promised-date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="mech-notes">Detalhes das Atividades</label>
+                    <textarea id="mech-notes" class="form-control" rows="5"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="mech-attachments"></div>
+                    <button id="mech-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="mech-file-input" style="display: none;">
+                </div>
+                <button id="mech-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+
+        <div id="electrical" class="tab-content">
+            <h2>Engenharia Elétrica</h2>
+            <div class="form-group">
+                <label for="elec-order">Selecione o Pedido</label>
+                <select id="elec-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="elec-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="elec-planning-date">Data Prometida (Planejamento)</label>
+                    <input type="date" id="elec-planning-date" class="form-control" readonly>
+                </div>
+
+
+                <div class="form-group">
+                    <button id="elec-import-bom" class="btn">Importar Lista de Materiais</button>
+                    <button id="elec-add-item" class="btn">Adicionar Item</button>
+                    <input type="file" id="elec-bom-file" style="display: none;" accept=".xlsx,.xls">
+                </div>
+
+                <h3>Lista de Materiais</h3>
+                <table id="elec-bom-table">
+                    <thead>
+                        <tr>
+                            <th>Nivel</th>
+                            <th>N°</th>
+                            <th>Componente</th>
+                            <th>Descrição</th>
+                            <th>UN</th>
+                            <th>Quantidade</th>
+                            <th>Data Prometida</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="elec-bom-body"></tbody>
+                </table>
+
+                <div class="form-group">
+                    <label for="elec-days">Dias para Conclusão</label>
+                    <input type="number" id="elec-days" class="form-control" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="elec-promised-date">Data Prometida Elétrica</label>
+                    <input type="date" id="elec-promised-date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="elec-notes">Detalhes das Atividades</label>
+                    <textarea id="elec-notes" class="form-control" rows="5"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="elec-attachments"></div>
+                    <button id="elec-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="elec-file-input" style="display: none;">
+                </div>
+                <button id="elec-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+
+        <div id="refrigeration" class="tab-content">
+            <h2>Engenharia de Refrigeração</h2>
+            <div class="form-group">
+                <label for="refrig-order">Selecione o Pedido</label>
+                <select id="refrig-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="refrig-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="refrig-days">Dias para Conclusão</label>
+                    <input type="number" id="refrig-days" class="form-control" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="refrig-promised-date">Data Prometida</label>
+                    <input type="date" id="refrig-promised-date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="refrig-notes">Detalhes das Atividades</label>
+                    <textarea id="refrig-notes" class="form-control" rows="5"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="refrig-attachments"></div>
+                    <button id="refrig-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="refrig-file-input" style="display: none;">
+                </div>
+                <button id="refrig-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+        <div id="assembly" class="tab-content">
+            <h2>Montagem</h2>
+            <div class="form-group">
+                <label for="assembly-order">Selecione o Pedido</label>
+                <select id="assembly-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="assembly-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="assembly-days">Dias para Conclusão</label>
+                    <input type="number" id="assembly-days" class="form-control" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="assembly-promised-date">Data Prometida</label>
+                    <input type="date" id="assembly-promised-date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="assembly-notes">Detalhes das Atividades</label>
+                    <textarea id="assembly-notes" class="form-control" rows="5"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="assembly-attachments"></div>
+                    <button id="assembly-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="assembly-file-input" style="display: none;">
+                </div>
+                <button id="assembly-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+        <div id="shipping" class="tab-content">
+            <h2>Expedição</h2>
+            <div class="form-group">
+                <label for="shipping-order">Selecione o Pedido</label>
+                <select id="shipping-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="shipping-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="shipping-notes">Notas</label>
+                    <textarea id="shipping-notes" class="form-control" rows="3"></textarea>
+                </div>
+                <div id="shipping-packages">
+                    <h3>Volumes</h3>
+                    <button id="add-package" class="btn">Adicionar Volume</button>
+                    <table id="packages-table">
+                        <thead>
+                            <tr>
+                                <th>Volume</th>
+                                <th>Comprimento (cm)</th>
+                                <th>Largura (cm)</th>
+                                <th>Altura (cm)</th>
+                                <th>Peso (kg)</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packages-body"></tbody>
+                    </table>
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="shipping-attachments"></div>
+                    <button id="shipping-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="shipping-file-input" style="display: none;">
+                </div>
+                <button id="shipping-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+        <div id="logistics" class="tab-content">
+            <h2>Logística</h2>
+            <div class="form-group">
+                <label for="logistics-order">Selecione o Pedido</label>
+                <select id="logistics-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="logistics-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="logistics-customer">Cliente</label>
+                    <input type="text" id="logistics-customer" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="logistics-address">Endereço de Entrega</label>
+                    <textarea id="logistics-address" class="form-control" rows="3" readonly></textarea>
+                </div>
+                <div id="logistics-packages">
+                    <h3>Volumes</h3>
+                    <table id="logistics-packages-table">
+                        <thead>
+                            <tr>
+                                <th>Volume</th>
+                                <th>Dimensões (cm)</th>
+                                <th>Peso (kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logistics-packages-body"></tbody>
+                    </table>
+                </div>
+                <div class="form-group">
+                    <label for="logistics-notes">Notas</label>
+                    <textarea id="logistics-notes" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="logistics-carrier">Transportadora</label>
+                    <input type="text" id="logistics-carrier" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="logistics-cost">Custo do Frete (R$)</label>
+                    <input type="number" id="logistics-cost" class="form-control" min="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="logistics-attachments"></div>
+                    <button id="logistics-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="logistics-file-input" style="display: none;">
+                </div>
+                <button id="logistics-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+        <div id="invoice" class="tab-content">
+            <h2>Faturamento</h2>
+            <div class="form-group">
+                <label for="invoice-order">Selecione o Pedido</label>
+                <select id="invoice-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="invoice-order-info" style="display: none;">
+                <div class="form-group">
+                    <label for="invoice-customer">Cliente</label>
+                    <input type="text" id="invoice-customer" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-address">Endereço de Entrega</label>
+                    <textarea id="invoice-address" class="form-control" rows="3" readonly></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-carrier">Transportadora</label>
+                    <input type="text" id="invoice-carrier" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-cost">Custo do Frete (R$)</label>
+                    <input type="text" id="invoice-cost" class="form-control" readonly>
+                </div>
+                <div id="invoice-products">
+                    <h3>Produtos</h3>
+                    <table id="invoice-products-table">
+                        <thead>
+                            <tr>
+                                <th>PN</th>
+                                <th>Descrição</th>
+                                <th>Quantidade</th>
+                                <th>Preço Unitário</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoice-products-body"></tbody>
+                    </table>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-number">Número da Fatura</label>
+                    <input type="text" id="invoice-number" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Anexos</label>
+                    <div class="attachments-container" id="invoice-attachments"></div>
+                    <button id="invoice-add-file" class="btn">Anexar Arquivo</button>
+                    <input type="file" id="invoice-file-input" style="display: none;">
+                </div>
+                <button id="invoice-save" class="btn btn-success">Salvar</button>
+            </div>
+        </div>
+
+        <div id="gantt" class="tab-content">
+            <h2>Gráfico de Processo</h2>
+            <div class="form-group">
+                <label for="gantt-order">Selecione o Pedido</label>
+                <select id="gantt-order" class="form-control">
+                    <option value="">Selecione um pedido</option>
+                </select>
+            </div>
+            <div id="gantt-chart-container" style="display: none;">
+                <div class="gantt-container">
+                    <canvas id="gantt-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="order-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal('order-modal')">&times;</span>
+                <h2 id="modal-order-title">Detalhes do Pedido</h2>
+                <div id="modal-order-content">
+                </div>
+                <div class="gantt-container" style="display: block;">
+                    <canvas id="modal-gantt-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="shipment-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal('shipment-modal')">&times;</span>
+                <h2>Confirmar Expedição</h2>
+                <div class="form-group">
+                    <label for="shipment-carrier">Transportadora</label>
+                    <input type="text" id="shipment-carrier" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="shipment-tracking">Número de Rastreamento</label>
+                    <input type="text" id="shipment-tracking" class="form-control">
+                </div>
+                <button id="confirm-shipment" class="btn btn-success">Confirmar Expedição</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Alert/Message Box -->
+    <div id="custom-alert-modal" class="custom-alert-modal">
+        <div class="custom-alert-content">
+            <h3 id="custom-alert-title"></h3>
+            <p id="custom-alert-message"></p>
+            <button id="custom-alert-ok-button">OK</button>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="custom-confirm-modal" class="custom-alert-modal">
+        <div class="custom-alert-content">
+            <h3 id="custom-confirm-title"></h3>
+            <p id="custom-confirm-message"></p>
+            <div style="display: flex; justify-content: center; gap: 10px;">
+                <button id="custom-confirm-yes-button" class="btn btn-success">Sim</button>
+                <button id="custom-confirm-no-button" class="btn btn-danger">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase variables (will be initialized in initFirebase)
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; // Default to anonymous until authenticated
+        let isAuthReady = false; // Flag to ensure Firebase is ready before operations
+
+        // Local data caches, updated by Firestore snapshots
+        let ordersData = [];
+        let activitiesData = [];
+        let attachmentsData = [];
+
+        // Current order being viewed/edited
+        let currentOrder = null;
+
+        // Global object to hold chart instances
+        let chartInstances = {};
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firestore Collection Paths
+        const getOrdersCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/orders`);
+        const getActivitiesCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/activities`);
+        const getAttachmentsCollection = () => firebase.collection(db, `artifacts/${appId}/users/${userId}/attachments`);
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            await initFirebase(); // Initialize Firebase first
+            setupTabs();
+            initPanelTab();
+            initSalesTab();
+            initPlanningTab();
+            initPurchasingTab();
+            initWarehouseTab();
+            initMechanicsTab();
+            initElectricalTab();
+            initRefrigerationTab();
+            initAssemblyTab();
+            initShippingTab();
+            initLogisticsTab();
+            initInvoiceTab();
+            initGanttTab();
+            setupModals();
+            setupCustomAlert();
+            setupCustomConfirm();
+        });
+
+        async function initFirebase() {
+            try {
+                app = firebase.initializeApp(firebaseConfig);
+                db = firebase.getFirestore(app);
+                auth = firebase.getAuth(app);
+
+                // Authenticate user
+                if (initialAuthToken) {
+                    await firebase.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await firebase.signInAnonymously(auth);
+                }
+
+                // Listen for auth state changes and set userId
+                firebase.onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-info').textContent = `Usuário ID: ${userId}`;
+                        isAuthReady = true;
+                        // Start listening to Firestore data once authenticated
+                        setupFirestoreListeners();
+                        updateUI(); // Initial UI update after auth and listeners are set
+                    } else {
+                        userId = 'anonymous';
+                        document.getElementById('user-info').textContent = `Usuário ID: ${userId} (Anônimo)`;
+                        isAuthReady = false;
+                        // Clear local data if user logs out or is not authenticated
+                        ordersData = [];
+                        activitiesData = [];
+                        attachmentsData = [];
+                        updateUI();
+                    }
+                });
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                customAlert("Erro ao inicializar o sistema de banco de dados. Tente novamente mais tarde.");
+            }
+        }
+
+        function setupFirestoreListeners() {
+            // Orders Listener
+            firebase.onSnapshot(getOrdersCollection(), (snapshot) => {
+                ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateUI(); // Update UI whenever orders change
+            }, (error) => {
+                console.error("Error fetching orders:", error);
+                customAlert("Erro ao carregar pedidos.");
+            });
+
+            // Activities Listener
+            firebase.onSnapshot(getActivitiesCollection(), (snapshot) => {
+                activitiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateActivityLog(); // Update activity log whenever activities change
+            }, (error) => {
+                console.error("Error fetching activities:", error);
+                customAlert("Erro ao carregar atividades.");
+            });
+
+            // Attachments Listener
+            firebase.onSnapshot(getAttachmentsCollection(), (snapshot) => {
+                attachmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Attachments are updated on demand for specific order views, so no global updateUI here.
+            }, (error) => {
+                console.error("Error fetching attachments:", error);
+                customAlert("Erro ao carregar anexos.");
+            });
+        }
+
+        // Save data to Firestore
+        async function saveOrderToFirestore(order) {
+            if (!isAuthReady) {
+                customAlert('Sistema não autenticado. Tente novamente.');
+                return;
+            }
+            try {
+                const orderRef = firebase.doc(getOrdersCollection(), order.orderNumber);
+                await firebase.setDoc(orderRef, order, { merge: true });
+            } catch (e) {
+                console.error("Error saving order: ", e);
+                customAlert("Erro ao salvar pedido.");
+            }
+        }
+
+        async function deleteOrderFromFirestore(orderNumber) {
+            if (!isAuthReady) {
+                customAlert('Sistema não autenticado. Tente novamente.');
+                return;
+            }
+            try {
+                // Delete order document
+                await firebase.deleteDoc(firebase.doc(getOrdersCollection(), orderNumber));
+
+                // Delete associated attachments
+                const qAttachments = firebase.query(getAttachmentsCollection(), firebase.where("orderNumber", "==", orderNumber));
+                const attachmentDocs = await firebase.getDocs(qAttachments);
+                const batch = firebase.writeBatch(db);
+                attachmentDocs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+
+                // Delete associated activities
+                const qActivities = firebase.query(getActivitiesCollection(), firebase.where("orderNumber", "==", orderNumber));
+                const activityDocs = await firebase.getDocs(qActivities);
+                const activityBatch = firebase.writeBatch(db);
+                activityDocs.forEach(doc => {
+                    activityBatch.delete(doc.ref);
+                });
+                await activityBatch.commit();
+
+            } catch (e) {
+                console.error("Error deleting order: ", e);
+                customAlert("Erro ao excluir pedido.");
+            }
+        }
+
+        async function addActivityToFirestore(orderNumber, department, action) {
+            if (!isAuthReady) return;
+            try {
+                await firebase.addDoc(getActivitiesCollection(), {
+                    timestamp: new Date().toISOString(),
+                    orderNumber,
+                    department,
+                    action
+                });
+            } catch (e) {
+                console.error("Error adding activity: ", e);
+            }
+        }
+
+        async function addAttachmentToFirestore(attachment) {
+            if (!isAuthReady) {
+                customAlert('Sistema não autenticado. Tente novamente.');
+                return;
+            }
+            try {
+                await firebase.addDoc(getAttachmentsCollection(), attachment);
+            } catch (e) {
+                console.error("Error adding attachment: ", e);
+                customAlert("Erro ao anexar arquivo.");
+            }
+        }
+
+        async function deleteAttachmentFromFirestore(attachmentId) {
+            if (!isAuthReady) {
+                customAlert('Sistema não autenticado. Tente novamente.');
+                return;
+            }
+            try {
+                await firebase.deleteDoc(firebase.doc(getAttachmentsCollection(), attachmentId));
+            } catch (e) {
+                console.error("Error deleting attachment: ", e);
+                customAlert("Erro ao excluir anexo.");
+            }
+        }
+
+        // Set up tab navigation
+        function setupTabs() {
+            const tabs = document.querySelectorAll('.nav-tabs a');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    tabs.forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                        // Reset dropdowns in the tab that is becoming inactive
+                        content.querySelectorAll('select.form-control').forEach(select => {
+                            select.value = ''; // Clear selected option
+                            // Trigger change event to hide associated info divs
+                            select.dispatchEvent(new Event('change'));
+                        });
+                    });
+
+                    this.classList.add('active');
+                    const target = this.getAttribute('href');
+                    document.querySelector(target).classList.add('active');
+
+                    // When a tab is activated, refresh its content if an order is selected
+                    const activeSelect = document.querySelector(target + ' .form-control');
+                    if (activeSelect && activeSelect.tagName === 'SELECT' && activeSelect.value) {
+                        activeSelect.dispatchEvent(new Event('change'));
+                    } else {
+                        updateUI();
+                    }
+                });
+            });
+        }
+
+        // Set up modals
+        function setupModals() {
+            const modals = document.querySelectorAll('.modal');
+            const closeButtons = document.querySelectorAll('.close');
+
+            closeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    closeModal(this.closest('.modal').id);
+                });
+            });
+
+            modals.forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeModal(this.id);
+                    }
+                });
+            });
+        }
+
+        // Function to open a modal
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+
+        // Function to close a modal
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('show');
+                // Special handling for custom alert/confirm modals
+                if (modalId === 'custom-alert-modal' || modalId === 'custom-confirm-modal') {
+                    modal.style.opacity = '0';
+                    modal.style.pointerEvents = 'none';
+                    // Use a timeout to ensure the transition completes before setting display to 'none'
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                    }, 300); // Match this duration with the CSS transition duration
+                }
+            }
+        }
+
+        // Custom Alert/Message Box functions
+        function setupCustomAlert() {
+            document.getElementById('custom-alert-ok-button').addEventListener('click', function() {
+                closeModal('custom-alert-modal');
+            });
+            // Ensure the modal is initially hidden and styled correctly
+            const customAlertModal = document.getElementById('custom-alert-modal');
+            if (customAlertModal) {
+                customAlertModal.style.display = 'none'; // Ensure it's hidden initially
+                customAlertModal.style.opacity = '0';
+                customAlertModal.style.transition = 'opacity 0.3s ease-in-out';
+                customAlertModal.style.pointerEvents = 'none'; // Allow clicks through when hidden
+            }
+        }
+
+        function customAlert(message, title = 'Atenção') {
+            const customAlertModal = document.getElementById('custom-alert-modal');
+            document.getElementById('custom-alert-title').textContent = title;
+            document.getElementById('custom-alert-message').textContent = message;
+
+            if (customAlertModal) {
+                customAlertModal.style.display = 'flex'; // Use flex to center content
+                customAlertModal.style.opacity = '1';
+                customAlertModal.style.pointerEvents = 'auto';
+            }
+        }
+
+        // Custom Confirm Modal functions
+        let confirmOnYesCallback = null;
+        let confirmOnNoCallback = null;
+
+        function setupCustomConfirm() {
+            document.getElementById('custom-confirm-yes-button').addEventListener('click', function() {
+                if (confirmOnYesCallback) {
+                    confirmOnYesCallback();
+                }
+                closeModal('custom-confirm-modal');
+                confirmOnYesCallback = null; // Clear callback
+                confirmOnNoCallback = null; // Clear callback
+            });
+
+            document.getElementById('custom-confirm-no-button').addEventListener('click', function() {
+                if (confirmOnNoCallback) {
+                    confirmOnNoCallback();
+                }
+                closeModal('custom-confirm-modal');
+                confirmOnYesCallback = null; // Clear callback
+                confirmOnNoCallback = null; // Clear callback
+            });
+
+            const customConfirmModal = document.getElementById('custom-confirm-modal');
+            if (customConfirmModal) {
+                customConfirmModal.style.display = 'none'; // Ensure it's hidden initially
+                customConfirmModal.style.opacity = '0';
+                customConfirmModal.style.transition = 'opacity 0.3s ease-in-out';
+                customConfirmModal.style.pointerEvents = 'none';
+            }
+        }
+
+        function customConfirm(message, title = 'Confirmação', onYes, onNo = null) {
+            const customConfirmModal = document.getElementById('custom-confirm-modal');
+            document.getElementById('custom-confirm-title').textContent = title;
+            document.getElementById('custom-confirm-message').textContent = message;
+
+            confirmOnYesCallback = onYes;
+            confirmOnNoCallback = onNo;
+
+            if (customConfirmModal) {
+                customConfirmModal.style.display = 'flex';
+                customConfirmModal.style.opacity = '1';
+                customConfirmModal.style.pointerEvents = 'auto';
+            }
+        }
+
+
+        // Update UI based on current data
+        function updateUI() {
+            updateOrdersTable();
+            updateDepartmentOrderSelects();
+            updateActivityLog();
+        }
+
+        // Update orders table in main panel
+        function updateOrdersTable() {
+            const tbody = document.getElementById('orders-body');
+            tbody.innerHTML = '';
+
+            ordersData.forEach(order => {
+                const row = document.createElement('tr');
+                const prevSortColumn = currentSortColumn;
+                const prevSortDirection = sortDirection;
+
+                let rowClass = 'status-normal';
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (order.currentPromisedDate) {
+                    const currentDate = parseDate(order.currentPromisedDate);
+                    if (currentDate && today > currentDate && !order.dateReady) {
+                        rowClass = 'status-delayed';
+                    }
+                }
+
+                const departments = ['planning', 'purchasing', 'warehouse', 'mechanics', 'electrical', 'refrigeration', 'assembly', 'shipping', 'logistics', 'invoice'];
+                const pendingDepts = departments.filter(dept => !order[dept]?.completed);
+
+                if (pendingDepts.length > 0) {
+                    rowClass = 'status-pending';
+                } else if (rowClass !== 'status-delayed') {
+                    rowClass = 'status-completed';
+                }
+
+                row.className = rowClass;
+
+                let daysDelay = '-';
+                if (order.currentPromisedDate) {
+                    const promised = parseDate(order.currentPromisedDate);
+                    const ready = order.dateReady ? parseDate(order.dateReady) : today;
+                    if (promised && ready && ready > promised) {
+                        daysDelay = Math.floor((ready - promised) / (1000 * 60 * 60 * 24));
+                    } else {
+                        daysDelay = 0;
+                    }
+                }
+
+                // Sorting happens after rows are added, so no need to re-apply here.
+                // if (prevSortColumn !== -1) {
+                //     currentSortColumn = prevSortColumn;
+                //     sortDirection = prevSortDirection;
+                //     sortTable(prevSortColumn);
+                // }
+
+                let pendencies = 'Nenhuma';
+                if (pendingDepts.length > 0) {
+                    pendencies = 'Pendências: ' + pendingDepts.map(dept => {
+                        const deptNames = {
+                            'planning': 'Planejamento', 'purchasing': 'Compras', 'warehouse': 'Estoque',
+                            'mechanics': 'Mecânica', 'electrical': 'Elétrica', 'refrigeration': 'Refrigeração',
+                            'assembly': 'Montagem', 'shipping': 'Expedição', 'logistics': 'Logística', 'invoice': 'Faturamento'
+                        };
+                        return deptNames[dept] || dept;
+                    }).join(', ');
+                }
+
+                row.innerHTML = `
+                    <td><a href="#" class="order-link" data-order="${order.orderNumber}">${order.orderNumber}</a></td>
+                    <td>${formatDate(order.orderDate)}</td>
+                    <td>${formatDate(order.desiredDeliveryDate)}</td>
+                    <td>${order.customer}</td>
+
+                    <td>${pendencies}</td>
+                    <td>${formatDate(order.dateReady)}</td>
+                    <td>${formatDate(order.shipmentDate)}</td>
+                    <td>${order.invoiceNumber || '-'}</td>
+                    <td>${order.freightCompany || '-'}</td>
+                    <td>${order.trackingNumber || '-'}</td>
+                    <td><button class="btn btn-sm btn-info view-attachments" data-order="${order.orderNumber}">Ver</button></td>
+                    <td>
+                        <button class="btn btn-sm view-order" data-order="${order.orderNumber}">Detalhes</button>
+                        <button class="btn btn-sm btn-danger delete-order" data-order="${order.orderNumber}">Excluir</button>
+                        ${!order.shipmentDate ? `<button class="btn btn-sm btn-success confirm-shipment" data-order="${order.orderNumber}">Enviado</button>` : ''}
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+
+            tbody.querySelectorAll('.order-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const orderNumber = this.getAttribute('data-order');
+                    showOrderDetails(orderNumber);
+                });
+            });
+
+            // Add event listeners to buttons in the table
+            tbody.querySelectorAll('.view-order').forEach(button => {
+                button.addEventListener('click', function() {
+                    const orderNumber = this.getAttribute('data-order');
+                    showOrderDetails(orderNumber);
+                });
+            });
+
+            tbody.querySelectorAll('.delete-order').forEach(button => {
+                button.addEventListener('click', function() {
+                    const orderNumber = this.getAttribute('data-order');
+                    deleteOrder(orderNumber);
+                });
+            });
+
+            tbody.querySelectorAll('.confirm-shipment').forEach(button => {
+                button.addEventListener('click', function() {
+                    showShipmentModal(this.getAttribute('data-order'));
+                });
+            });
+
+            tbody.querySelectorAll('.view-attachments').forEach(button => {
+                button.addEventListener('click', function() {
+                    showAttachments(this.getAttribute('data-order'));
+                });
+            });
+        }
+
+        // Update order selects in all department tabs
+        function updateDepartmentOrderSelects() {
+            const selects = [
+                'planning-order', 'purchasing-order', 'warehouse-order',
+                'mech-order', 'elec-order', 'refrig-order',
+                'assembly-order', 'shipping-order', 'logistics-order',
+                'invoice-order', 'gantt-order'
+            ];
+
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Selecione um pedido</option>';
+
+                ordersData.forEach(order => {
+                    const option = document.createElement('option');
+                    option.value = order.orderNumber;
+                    option.textContent = `${order.orderNumber} - ${order.customer}`;
+                    select.appendChild(option);
+                });
+
+                if (currentValue && ordersData.some(o => o.orderNumber === currentValue)) {
+                    select.value = currentValue;
+                }
+            });
+        }
+
+        function initPanelTab() {
+            document.getElementById('apply-filter').addEventListener('click', applyFilters);
+            document.getElementById('reset-filter').addEventListener('click', resetFilters);
+            document.getElementById('export-data').addEventListener('click', exportToExcel);
+            document.getElementById('import-data').addEventListener('click', () => document.getElementById('file-import').click());
+            document.getElementById('file-import').addEventListener('change', importFromExcel);
+            document.getElementById('confirm-shipment').addEventListener('click', confirmShipment);
+            document.getElementById('clear-all-data').addEventListener('click', clearAllUserData); // New button for clearing data
+        }
+
+        async function clearAllUserData() {
+            customConfirm('Tem certeza que deseja apagar TODOS os seus dados (pedidos, atividades, anexos)? Esta ação é irreversível.', 'Apagar Todos os Dados', async () => {
+                if (!isAuthReady) {
+                    customAlert('Sistema não autenticado. Tente novamente.');
+                    return;
+                }
+                try {
+                    const collectionsToClear = [
+                        getOrdersCollection(),
+                        getActivitiesCollection(),
+                        getAttachmentsCollection()
+                    ];
+
+                    for (const colRef of collectionsToClear) {
+                        const docs = await firebase.getDocs(colRef);
+                        const batch = firebase.writeBatch(db);
+                        docs.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                    }
+                    customAlert('Todos os seus dados foram apagados com sucesso.');
+                } catch (error) {
+                    console.error("Error clearing all user data:", error);
+                    customAlert("Erro ao apagar todos os dados.");
+                }
+            });
+        }
+
+        function initSalesTab() {
+            document.getElementById('add-product').addEventListener('click', () => addProductRow());
+            document.getElementById('sales-add-ft').addEventListener('click', () => document.getElementById('sales-ft-file').click());
+            document.getElementById('sales-add-desc').addEventListener('click', () => document.getElementById('sales-desc-file').click());
+            document.getElementById('sales-add-other').addEventListener('click', () => document.getElementById('sales-other-file').click());
+
+            const handleFile = (e, type) => {
+                const orderNumber = document.getElementById('sales-order').value;
+                if (!orderNumber) { customAlert('Insira o número do pedido primeiro.'); return; }
+                const order = ordersData.find(o => o.orderNumber === orderNumber);
+                if (order) {
+                    currentOrder = order;
+                    handleFileUpload(e, 'Vendas', type, 'sales-attachments');
+                } else {
+                    customAlert('Salve o pedido antes de anexar arquivos.');
+                }
+            };
+            document.getElementById('sales-ft-file').addEventListener('change', e => handleFile(e, 'FT'));
+            document.getElementById('sales-desc-file').addEventListener('change', e => handleFile(e, 'Descrição'));
+            document.getElementById('sales-other-file').addEventListener('change', e => handleFile(e, 'Outro'));
+
+            document.getElementById('sales-save').addEventListener('click', saveSalesData);
+
+            document.getElementById('sales-order').addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                if (order) {
+                    populateSalesForm(order);
+                } else {
+                    currentOrder = null;
+                    document.getElementById('sales-customer').value = '';
+                    document.getElementById('sales-address').value = '';
+                    document.getElementById('sales-city').value = '';
+                    document.getElementById('sales-cep').value = '';
+                    document.getElementById('sales-date').value = '';
+                    document.getElementById('sales-desired-date').value = '';
+                    document.getElementById('products-body').innerHTML = '';
+                    document.getElementById('sales-attachments').innerHTML = '<p>Nenhum anexo.</p>';
+                }
+            });
+        }
+
+        function initPlanningTab() {
+            const orderSelect = document.getElementById('planning-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                const infoDiv = document.getElementById('planning-order-info');
+
+                if (order) {
+                    currentOrder = order;
+                    infoDiv.style.display = 'block';
+
+                    // Populate products table
+                    const productsBody = document.getElementById('planning-products-body');
+                    productsBody.innerHTML = ''; // Clear previous content
+                    if (order.products && order.products.length > 0) {
+                        order.products.forEach(p => {
+                            const row = productsBody.insertRow();
+                            row.innerHTML = `<td>${p.pn}</td><td>${p.description || '-'}</td><td>${p.quantity}</td>`;
+                        });
+                    } else {
+                        const row = productsBody.insertRow();
+                        row.innerHTML = `<td colspan="3">Nenhum produto encontrado para este pedido.</td>`;
+                    }
+
+                    // Populate the BOM overview table
+                    updateBOMTable('planning-bom-body', order.bom);
+
+                    // Set dates
+                    document.getElementById('planning-desired-date').valueAsDate =
+                        order.desiredDeliveryDate ? parseDate(order.desiredDeliveryDate) : null;
+
+                    document.getElementById('planning-first-promised').valueAsDate =
+                        order.firstPromisedDate ? parseDate(order.firstPromisedDate) : null;
+                    document.getElementById('planning-first-promised').readOnly = !!order.firstPromisedDate;
+
+                    document.getElementById('planning-second-promised').valueAsDate =
+                        order.secondPromisedDate ? parseDate(order.secondPromisedDate) : null;
+
+                    document.getElementById('planning-third-promised').valueAsDate =
+                        order.thirdPromisedDate ? parseDate(order.thirdPromisedDate) : null;
+
+                    document.getElementById('planning-current-promised').valueAsDate =
+                        order.currentPromisedDate ? parseDate(order.currentPromisedDate) : null;
+
+                    document.getElementById('planning-notes').value = order.planning?.notes || '';
+                } else {
+                    infoDiv.style.display = 'none';
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('planning-save').addEventListener('click', savePlanningData);
+        }
+
+        function initPurchasingTab() {
+            const orderSelect = document.getElementById('purchasing-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                const infoDiv = document.getElementById('purchasing-order-info');
+                infoDiv.style.display = order ? 'block' : 'none';
+
+                if (order) {
+                    currentOrder = order;
+                    updateBOMTable('purchasing-bom-body', order.bom);
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('purchasing-import-bom').addEventListener('click', () =>
+                document.getElementById('purchasing-bom-file').click());
+
+            document.getElementById('purchasing-bom-file').addEventListener('change', e =>
+                importBOM(e, 'purchasing-bom-body', 'Compras'));
+
+            document.getElementById('purchasing-save').addEventListener('click', savePurchasingData);
+        }
+
+        function initWarehouseTab() {
+            const orderSelect = document.getElementById('warehouse-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                const infoDiv = document.getElementById('warehouse-order-info');
+                infoDiv.style.display = order ? 'block' : 'none';
+
+                if (order) {
+                    currentOrder = order;
+                    updateBOMTable('warehouse-bom-body', order.bom);
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('warehouse-save').addEventListener('click', saveWarehouseData);
+        }
+
+        function initElectricalTab() {
+            const orderSelect = document.getElementById('elec-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                const infoDiv = document.getElementById('elec-order-info');
+                infoDiv.style.display = order ? 'block' : 'none';
+
+                if (order) {
+                    currentOrder = order;
+                    document.getElementById('elec-planning-date').valueAsDate =
+                        order.currentPromisedDate ? parseDate(order.currentPromisedDate) : null;
+
+                    updateBOMTable('elec-bom-body', JSON.parse(JSON.stringify(order.bom || [])));
+
+                    const data = order.electrical || {};
+                    document.getElementById('elec-days').value = data.days || '';
+                    document.getElementById('elec-promised-date').valueAsDate = data.promisedDate ? parseDate(data.promisedDate) : null;
+                    document.getElementById('elec-notes').value = data.notes || '';
+                    showAttachmentsForOrder('elec-attachments', order.orderNumber, 'Elétrica');
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('elec-import-bom').addEventListener('click', () => document.getElementById('elec-bom-file').click());
+            document.getElementById('elec-bom-file').addEventListener('change', e => importBOM(e, 'elec-bom-body', 'Elétrica'));
+
+            document.getElementById('elec-add-item').addEventListener('click', () => {
+                if (!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+
+                const newItem = { nivel: '', numero: '', componente: '', descricao: '', un: '', quantidade: 1, dataPrometida: '', emEstoque: '0' };
+
+                if (!currentOrder.bom) currentOrder.bom = [];
+                currentOrder.bom.push(newItem);
+                updateBOMTable('elec-bom-body', currentOrder.bom);
+                addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', 'Novo item adicionado à lista de materiais.');
+            });
+
+            document.getElementById('elec-add-file').addEventListener('click', () => {
+                if(!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+                document.getElementById('elec-file-input').click();
+            });
+            document.getElementById('elec-file-input').addEventListener('change', e => handleFileUpload(e, 'Elétrica', 'Arquivo Elétrica', 'elec-attachments'));
+
+            document.getElementById('elec-save').addEventListener('click', saveElectricalData);
+        }
+
+        async function saveSalesData() {
+            const orderNumber = document.getElementById('sales-order').value;
+            if (!orderNumber) { customAlert('Insira o número do pedido.'); return; }
+
+            const products = [];
+            document.getElementById('products-body').querySelectorAll('tr').forEach(row => {
+                products.push({
+                    pn: row.querySelector('.product-pn').value,
+                    description: row.querySelector('.product-desc').value,
+                    quantity: parseInt(row.querySelector('.product-qty').value) || 1
+                });
+            });
+            if (products.length === 0 || !products[0].pn) { customAlert('Adicione ao menos um produto com PN.'); return; }
+
+            const orderIndex = ordersData.findIndex(o => o.orderNumber === orderNumber);
+            let orderData = orderIndex !== -1 ? { ...ordersData[orderIndex] } : {
+                orderNumber,
+                products: [],
+                bom: [], // Initialize central BOM
+                mechanics: {}, electrical: {}, refrigeration: {}, assembly: {},
+                shipping: {}, logistics: {}, invoice: {}, planning: {}, purchasing: {}, warehouse: {}
+            };
+
+            Object.assign(orderData, {
+                orderDate: document.getElementById('sales-date').valueAsDate ? document.getElementById('sales-date').valueAsDate.toISOString() : '',
+                desiredDeliveryDate: document.getElementById('sales-desired-date').valueAsDate?.toISOString() || '',
+                customer: document.getElementById('sales-customer').value,
+                address: document.getElementById('sales-address').value,
+                city: document.getElementById('sales-city').value,
+                cep: document.getElementById('sales-cep').value,
+                products
+            });
+
+            await saveOrderToFirestore(orderData);
+
+            if (orderIndex === -1) {
+                await addActivityToFirestore(orderNumber, 'Vendas', 'Pedido criado');
+            } else {
+                await addActivityToFirestore(orderNumber, 'Vendas', 'Pedido atualizado');
+            }
+
+            customAlert(`Pedido ${orderNumber} salvo com sucesso!`);
+        }
+
+        async function savePlanningData() {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const firstPromised = document.getElementById('planning-first-promised').valueAsDate;
+            const secondPromised = document.getElementById('planning-second-promised').valueAsDate;
+            const thirdPromised = document.getElementById('planning-third-promised').valueAsDate;
+
+            if (!firstPromised) { customAlert('Preencha a primeira data prometida.'); return; }
+
+            currentOrder.firstPromisedDate = firstPromised ? firstPromised.toISOString() : '';
+            currentOrder.secondPromisedDate = secondPromised ? secondPromised.toISOString() : '';
+            currentOrder.thirdPromisedDate = thirdPromised ? thirdPromised.toISOString() : '';
+
+            const dates = [
+                currentOrder.firstPromisedDate,
+                currentOrder.secondPromisedDate,
+                currentOrder.thirdPromisedDate
+            ].filter(d => d).map(d => parseDate(d));
+
+            if (dates.length > 0) {
+                const latestDate = new Date(Math.max(...dates.filter(d => d && !isNaN(d.getTime()))));
+                currentOrder.currentPromisedDate = latestDate.toISOString();
+            } else {
+                currentOrder.currentPromisedDate = ''; // Clear if no valid dates
+            }
+
+            if (!currentOrder.planning) currentOrder.planning = {};
+            currentOrder.planning.notes = document.getElementById('planning-notes').value;
+            currentOrder.planning.completed = true;
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Planejamento', 'Datas prometidas atualizadas');
+            customAlert('Dados de planejamento salvos com sucesso!');
+        }
+
+        async function savePurchasingData() {
+            if (!currentOrder || !currentOrder.bom) { customAlert('Selecione um pedido e importe a lista de materiais.'); return; }
+
+            document.getElementById('purchasing-bom-body').querySelectorAll('tr').forEach((row, index) => {
+                if (currentOrder.bom[index]) {
+                    const dateValue = row.querySelector('input[type="date"]')?.value;
+                    currentOrder.bom[index].dataPrometidaFornecedor = dateValue || '';
+                }
+            });
+
+            if (!currentOrder.purchasing) currentOrder.purchasing = {};
+            currentOrder.purchasing.completed = true;
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Compras', 'Lista de materiais e datas de fornecedores atualizadas');
+            customAlert('Dados de compras salvos com sucesso!');
+        }
+
+        async function saveWarehouseData() {
+            if (!currentOrder || !currentOrder.bom) { customAlert('Selecione um pedido. A lista de materiais deve ser importada primeiro.'); return; }
+
+            document.getElementById('warehouse-bom-body').querySelectorAll('tr').forEach((row, index) => {
+                if (currentOrder.bom[index]) {
+                    const stockValue = row.querySelector('input[type="number"]')?.value;
+                    currentOrder.bom[index].emEstoque = stockValue || '0';
+                }
+            });
+
+            if (!currentOrder.warehouse) currentOrder.warehouse = {};
+            currentOrder.warehouse.completed = true;
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Estoque', 'Níveis de estoque atualizados');
+            customAlert('Dados de estoque salvos com sucesso!');
+
+            // Re-render related tabs if active
+            if (document.querySelector('#purchasing.active') || document.querySelector('#planning.active')) {
+                document.querySelector('#purchasing-order').dispatchEvent(new Event('change'));
+                document.querySelector('#planning-order').dispatchEvent(new Event('change'));
+            }
+        }
+
+        async function saveElectricalData() {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const newBom = [];
+            let hasError = false;
+            document.getElementById('elec-bom-body').querySelectorAll('tr').forEach(row => {
+                const inputs = row.querySelectorAll('input, select');
+                const item = {
+                    nivel: inputs[0].value,
+                    numero: inputs[1].value,
+                    componente: inputs[2].value,
+                    descricao: inputs[3].value,
+                    un: inputs[4].value,
+                    quantidade: inputs[5].value,
+                    dataPrometida: inputs[6].value,
+                    emEstoque: currentOrder.bom.find(b => b.numero === inputs[1].value)?.emEstoque || '0' // Preserve stock value
+                };
+
+                if(!item.componente || !item.quantidade) {
+                    hasError = true;
+                }
+                newBom.push(item);
+            });
+
+            if (hasError) {
+                customAlert('Todos os itens devem ter pelo menos um Componente e uma Quantidade.');
+                return;
+            }
+
+            const promisedDate = document.getElementById('elec-promised-date').value;
+            if (!promisedDate) { customAlert('Preencha a data prometida da Elétrica.'); return; }
+
+            currentOrder.bom = newBom; // Update BOM in currentOrder
+
+            if (!currentOrder.electrical) currentOrder.electrical = {};
+            Object.assign(currentOrder.electrical, {
+                days: parseInt(document.getElementById('elec-days').value) || null,
+                promisedDate: promisedDate ? new Date(promisedDate).toISOString() : '', // Ensure valid date string
+                notes: document.getElementById('elec-notes').value,
+                completed: true
+            });
+
+            updateCurrentPromisedDate(currentOrder);
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', 'Lista de materiais e informações atualizadas');
+            customAlert('Dados de elétrica salvos com sucesso!');
+        }
+
+        function importBOM(event, tableBodyId, department) {
+            const file = event.target.files[0];
+            if (!file || !currentOrder) return;
+
+            if (currentOrder.bom && currentOrder.bom.length > 0) {
+                customConfirm('Este pedido já possui uma lista de materiais. Deseja substituí-la?', 'Confirmação',
+                    () => { // onYes callback
+                        processImportBOM(file, tableBodyId, department);
+                    },
+                    () => { // onNo callback
+                        customAlert('Importação de BOM cancelada.');
+                        event.target.value = ''; // Reset input
+                    }
+                );
+            } else {
+                processImportBOM(file, tableBodyId, department);
+            }
+        }
+
+        function processImportBOM(file, tableBodyId, department) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (jsonData.length === 0) {
+                        customAlert('O arquivo não contém dados válidos.');
+                        return;
+                    }
+
+                    const bom = jsonData.map(item => ({
+                        nivel: item['Nivel']?.toString() || '',
+                        numero: item['N°']?.toString() || '',
+                        componente: item['Componente']?.toString() || '',
+                        descricao: item['Descrição']?.toString() || '',
+                        un: item['UN']?.toString() || '',
+                        quantidade: item['Quantidade']?.toString() || '1',
+                        emEstoque: item['Em Estoque']?.toString() || '0',
+                        dataPrometida: item['Data Prometida'] ? parseDate(item['Data Prometida'])?.toISOString() : '',
+                        dataPrometidaFornecedor: item['Data Prometida Fornecedor'] ? parseDate(item['Data Prometida Fornecedor'])?.toISOString() : ''
+                    }));
+
+                    currentOrder.bom = bom;
+                    updateBOMTable(tableBodyId, currentOrder.bom);
+
+                    if(!currentOrder.purchasing) currentOrder.purchasing = {};
+                    currentOrder.purchasing.completed = true;
+
+                    await saveOrderToFirestore(currentOrder);
+                    await addActivityToFirestore(currentOrder.orderNumber, department, `Lista de materiais importada: ${file.name}`);
+                    customAlert(`Lista de materiais importada com sucesso! ${bom.length} itens encontrados.`);
+                } catch (error) {
+                    console.error('Error importing BOM:', error);
+                    customAlert('Erro ao importar o arquivo. Verifique o formato do arquivo.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            // event.target.value = ''; // Reset input handled in confirm callback
+        }
+
+        function updateBOMTable(tableBodyId, bom) {
+            const tbody = document.getElementById(tableBodyId);
+            tbody.innerHTML = ''; // Clear previous content
+
+            // Handle cases where BOM is null, undefined, or empty
+            if (!bom || bom.length === 0) {
+                const colSpan = (tableBodyId === 'elec-bom-body') ? 8 : (tableBodyId === 'warehouse-bom-body') ? 7 : 9;
+                const row = tbody.insertRow();
+                row.innerHTML = `<td colspan="${colSpan}" style="text-align: center;">A Lista de Materiais (BOM) ainda não foi importada para este pedido.</td>`;
+                return;
+            }
+
+            bom.forEach(item => {
+                const row = tbody.insertRow();
+
+                if (tableBodyId === 'elec-bom-body') {
+                    row.innerHTML = `
+                        <td><input type="text" class="form-control" value="${item.nivel || ''}"></td>
+                        <td><input type="text" class="form-control" value="${item.numero || ''}"></td>
+                        <td><input type="text" class="form-control" value="${item.componente || ''}"></td>
+                        <td><input type="text" class="form-control" value="${item.descricao || ''}"></td>
+                        <td><input type="text" class="form-control" value="${item.un || ''}"></td>
+                        <td><input type="number" class="form-control" min="1" value="${item.quantidade || 1}"></td>
+                        <td><input type="date" class="form-control" value="${formatDateForInput(item.dataPrometida)}"></td>
+                        <td><button class="btn btn-sm btn-danger remove-item">X</button></td>
+                    `;
+                    row.querySelector('.remove-item').addEventListener('click', async () => {
+                        const itemIndex = currentOrder.bom.findIndex(i => i.numero === item.numero && i.componente === item.componente);
+                        if(itemIndex > -1) {
+                            currentOrder.bom.splice(itemIndex, 1);
+                            await saveOrderToFirestore(currentOrder);
+                            await addActivityToFirestore(currentOrder.orderNumber, 'Elétrica', `Item ${item.componente} removido.`);
+                            updateBOMTable('elec-bom-body', currentOrder.bom); // Re-render table after removal
+                        }
+                    });
+
+                } else if (tableBodyId === 'planning-bom-body') {
+                    const numMachines = (currentOrder.products || []).reduce((sum, p) => sum + (parseInt(p.quantity, 10) || 0), 0) || 1;
+                    const quantidadeNecessaria = parseFloat(item.quantidade) || 0;
+                    const emEstoque = parseFloat(item.emEstoque) || 0;
+                    const suggestedQty = Math.max(0, (numMachines * quantidadeNecessaria) - emEstoque);
+
+                    row.innerHTML = `
+                        <td>${item.nivel || '-'}</td>
+                        <td>${item.numero || '-'}</td>
+                        <td>${item.componente || '-'}</td>
+                        <td>${item.descricao || '-'}</td>
+                        <td>${item.un || '-'}</td>
+                        <td>${quantidadeNecessaria}</td>
+                        <td>${emEstoque}</td>
+                        <td>${suggestedQty}</td>
+                        <td>${formatDate(item.dataPrometidaFornecedor) || '-'}</td>
+                    `;
+                } else if (tableBodyId === 'purchasing-bom-body') {
+                    const numMachines = (currentOrder.products || []).reduce((sum, p) => sum + (parseInt(p.quantity, 10) || 0), 0) || 1;
+                    const quantidadeNecessaria = parseFloat(item.quantidade) || 0;
+                    const emEstoque = parseFloat(item.emEstoque) || 0;
+                    const suggestedQty = Math.max(0, (numMachines * quantidadeNecessaria) - emEstoque);
+
+                    row.innerHTML = `
+                        <td>${item.nivel || ''}</td>
+                        <td>${item.numero || ''}</td>
+                        <td>${item.componente || ''}</td>
+                        <td>${item.descricao || ''}</td>
+                        <td>${item.un || ''}</td>
+                        <td>${quantidadeNecessaria}</td>
+                        <td>${emEstoque}</td>
+                        <td>${suggestedQty}</td>
+                        <td><input type="date" class="form-control" value="${formatDateForInput(item.dataPrometidaFornecedor)}"></td>
+                    `;
+
+                } else if (tableBodyId === 'warehouse-bom-body') {
+                    row.innerHTML = `
+                        <td>${item.nivel || ''}</td>
+                        <td>${item.numero || ''}</td>
+                        <td>${item.componente || ''}</td>
+                        <td>${item.descricao || ''}</td>
+                        <td>${item.un || ''}</td>
+                        <td>${item.quantidade || ''}</td>
+                        <td><input type="number" class="form-control" min="0" value="${item.emEstoque || 0}"></td>
+                    `;
+                }
+            });
+        }
+
+        function deleteOrder(orderNumber) {
+            customConfirm(`Tem certeza que deseja excluir o pedido ${orderNumber}? Esta ação não pode ser desfeita.`, 'Confirmação',
+                async () => { // onYes callback
+                    await deleteOrderFromFirestore(orderNumber);
+                    await addActivityToFirestore(orderNumber, 'Sistema', `Pedido ${orderNumber} excluído`);
+                    customAlert(`Pedido ${orderNumber} excluído com sucesso.`);
+                }
+            );
+        }
+
+        function updateActivityLog() {
+            const logContainer = document.getElementById('log-entries');
+            logContainer.innerHTML = '';
+
+            const sortedActivities = [...activitiesData].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            sortedActivities.slice(0, 100).forEach(activity => { // Limit log entries for performance
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `
+                    <strong>${formatDateTime(activity.timestamp)}</strong> -
+                    Pedido: ${activity.orderNumber} -
+                    Departamento: ${activity.department} -
+                    ${activity.action}
+                `;
+                logContainer.appendChild(entry);
+            });
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return '-';
+            return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        }
+
+        function formatDateForInput(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().split('T')[0];
+        }
+
+        function formatDateTime(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return '-';
+            return date.toLocaleString('pt-BR');
+        }
+
+        function showOrderDetails(orderNumber) {
+            const order = ordersData.find(o => o.orderNumber === orderNumber);
+            if (!order) return;
+
+            const modal = document.getElementById('order-modal');
+            const title = document.getElementById('modal-order-title');
+            const content = document.getElementById('modal-order-content');
+            const ganttContainer = document.querySelector('#order-modal .gantt-container');
+
+            title.textContent = `Detalhes do Pedido ${order.orderNumber}`;
+
+            let html = `
+                <div class="order-details">
+                    <h3>Informações Básicas</h3>
+                    <p><strong>Cliente:</strong> ${order.customer}</p>
+                    <p><strong>Data do Pedido:</strong> ${formatDate(order.orderDate)}</p>
+                    <p><strong>Data Desejada:</strong> ${formatDate(order.desiredDeliveryDate)}</p>
+                    <p><strong>Primeira Data Prometida:</strong> ${formatDate(order.firstPromisedDate)}</p>
+                    <p><strong>Data Prometida Atual:</strong> ${formatDate(order.currentPromisedDate)}</p>
+
+                    <h3>Produtos</h3>
+                    <table><thead><tr><th>PN</th><th>Descrição</th><th>Quantidade</th></tr></thead><tbody>`;
+            (order.products || []).forEach(p => { html += `<tr><td>${p.pn}</td><td>${p.description || '-'}</td><td>${p.quantity}</td></tr>`; });
+            html += `</tbody></table>
+
+                    <h3>Status por Departamento</h3>
+                    <table><thead><tr><th>Departamento</th><th>Status</th><th>Data Prometida</th><th>Notas</th></tr></thead><tbody>`;
+            const departments = [
+                { id: 'planning', name: 'Planejamento'}, { id: 'purchasing', name: 'Compras' }, { id: 'warehouse', name: 'Estoque'},
+                { id: 'mechanics', name: 'Mecânica' }, { id: 'electrical', name: 'Elétrica' },
+                { id: 'refrigeration', name: 'Refrigeração' }, { id: 'assembly', name: 'Montagem' },
+                { id: 'shipping', name: 'Expedição' }, { id: 'logistics', 'name': 'Logística' }, { id: 'invoice', name: 'Faturamento' }
+            ];
+            departments.forEach(dept => {
+                const deptData = order[dept.id] || {};
+                html += `<tr><td>${dept.name}</td><td>${deptData.completed ? 'Concluído' : 'Pendente'}</td><td>${formatDate(deptData.promisedDate)}</td><td>${deptData.notes || '-'}</td></tr>`;
+            });
+            html += `</tbody></table></div>`;
+
+            content.innerHTML = html;
+            ganttContainer.style.display = 'block';
+
+            renderGanttChart('modal-gantt-chart', order);
+
+            // Make sure the modal is displayed
+            openModal('order-modal');
+        }
+
+        function showAttachments(orderNumber) {
+            const order = ordersData.find(o => o.orderNumber === orderNumber);
+            if (!order) return;
+
+            const modal = document.getElementById('order-modal');
+            const title = document.getElementById('modal-order-title');
+            const content = document.getElementById('modal-order-content');
+            const ganttContainer = document.querySelector('#order-modal .gantt-container');
+
+            title.textContent = `Anexos do Pedido ${order.orderNumber}`;
+
+            let html = '<div class="attachments-container">';
+            const orderAttachments = attachmentsData.filter(a => a.orderNumber === orderNumber);
+
+            if (orderAttachments.length === 0) {
+                html += '<p>Nenhum anexo encontrado para este pedido.</p>';
+            } else {
+                orderAttachments.forEach(attachment => {
+                    html += `
+                        <div class="attachment-item">
+                            <h4>${attachment.name}</h4>
+                            <p>Dept: ${attachment.department}</p>
+                            <div class="attachment-actions">
+                                <button class="btn btn-sm download-attachment" data-id="${attachment.id}">Download</button>
+                                <button class="btn btn-sm btn-danger delete-attachment" data-id="${attachment.id}">Excluir</button>
+                            </div>
+                        </div>`;
+                });
+            }
+            html += '</div>';
+            content.innerHTML = html;
+            ganttContainer.style.display = 'none';
+
+            content.querySelectorAll('.download-attachment').forEach(b => b.addEventListener('click', e => downloadAttachment(e.target.getAttribute('data-id'))));
+            content.querySelectorAll('.delete-attachment').forEach(b => b.addEventListener('click', e => deleteAttachment(e.target.getAttribute('data-id'), orderNumber)));
+
+            openModal('order-modal');
+        }
+
+        function downloadAttachment(attachmentId) {
+            const attachment = attachmentsData.find(a => a.id === attachmentId);
+            if (!attachment) return;
+
+            const byteString = atob(attachment.data.split(',')[1]);
+            const mimeString = attachment.data.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            const blob = new Blob([ab], { type: mimeString });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = attachment.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function deleteAttachment(attachmentId, orderNumber) {
+            customConfirm('Tem certeza que deseja excluir este anexo?', 'Confirmação',
+                async () => { // onYes callback
+                    const deletedAttachment = attachmentsData.find(a => a.id === attachmentId);
+                    await deleteAttachmentFromFirestore(attachmentId);
+                    showAttachments(orderNumber); // Refresh the view
+                    await addActivityToFirestore(orderNumber, 'Sistema', `Anexo ${deletedAttachment.name} excluído`);
+                    customAlert(`Anexo "${deletedAttachment.name}" excluído com sucesso.`);
+                }
+            );
+        }
+
+        function showShipmentModal(orderNumber) {
+            const order = ordersData.find(o => o.orderNumber === orderNumber);
+            if (!order) return;
+            currentOrder = order;
+            document.getElementById('shipment-carrier').value = order.freightCompany || '';
+            document.getElementById('shipment-tracking').value = order.trackingNumber || '';
+            openModal('shipment-modal');
+        }
+
+        function applyFilters() {
+            const orderFilter = document.getElementById('filter-order').value.toLowerCase();
+            const customerFilter = document.getElementById('filter-customer').value.toLowerCase();
+            const statusFilter = document.getElementById('filter-status').value;
+
+            document.getElementById('orders-body').querySelectorAll('tr').forEach(row => {
+                const orderNumber = row.cells[0].textContent.toLowerCase();
+                const customer = row.cells[3].textContent.toLowerCase();
+                const status = row.className;
+
+                let matches = true;
+                if (orderFilter && !orderNumber.includes(orderFilter)) matches = false;
+                if (customerFilter && !customer.includes(customerFilter)) matches = false;
+                if (statusFilter && !status.includes(statusFilter)) matches = false;
+
+                row.style.display = matches ? '' : 'none';
+            });
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-order').value = '';
+            document.getElementById('filter-customer').value = '';
+            document.getElementById('filter-status').value = '';
+            applyFilters();
+        }
+
+        function exportToExcel() {
+            const exportData = ordersData.map(order => ({
+                'Nº Pedido': order.orderNumber,
+                'Data Pedido': formatDate(order.orderDate),
+                'Data Desejada': formatDate(order.desiredDeliveryDate),
+                'Cliente': order.customer,
+                'Produtos': (order.products || []).map(p => `${p.pn} (${p.quantity}x)`).join('; '),
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+            XLSX.writeFile(wb, 'pedidos_exportados.xlsx');
+        }
+
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            // If already a Date object, return it
+            if (dateStr instanceof Date && !isNaN(dateStr)) return dateStr;
+
+            // Handle Excel numeric date (days since 1900)
+            if (typeof dateStr === 'number') {
+                return new Date(Math.round((dateStr - 25569) * 86400 * 1000));
+            }
+
+            if (typeof dateStr !== 'string') return null;
+
+            // Try to parse as ISO string first (from Firestore)
+            const isoDate = new Date(dateStr);
+            if (!isNaN(isoDate.getTime())) return isoDate;
+
+            // Handle Brazilian date format (dd/mm/yyyy)
+            let parts = dateStr.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})$/);
+            if (parts) {
+                const day = parseInt(parts[1], 10);
+                const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed
+                let year = parseInt(parts[3], 10);
+                if (year < 100) year += 2000; // Handle 2-digit years
+                const date = new Date(Date.UTC(year, month, day)); // Use UTC to avoid timezone issues
+                if (!isNaN(date.getTime())) return date;
+            }
+
+            // Fallback to generic Date constructor
+            const genericDate = new Date(dateStr);
+            if (!isNaN(genericDate.getTime())) return genericDate;
+
+            return null;
+        }
+
+
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            customConfirm('Deseja importar os dados do Excel? Pedidos duplicados serão ignorados.', 'Importar Dados',
+                () => { // onYes callback
+                    processImportFromExcel(file);
+                },
+                () => { // onNo callback
+                    customAlert('Importação de dados cancelada.');
+                    event.target.value = ''; // Reset input
+                }
+            );
+        }
+
+        async function processImportFromExcel(file) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                let importedCount = 0, skippedCount = 0;
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    const batch = firebase.writeBatch(db);
+
+                    for (const item of jsonData) {
+                        try {
+                            const orderNumber = item['Nº Pedido']?.toString();
+                            if (!orderNumber || ordersData.some(o => o.orderNumber === orderNumber)) {
+                                skippedCount++;
+                                continue;
+                            }
+
+                            const parsedOrderDate = parseDate(item['Data Pedido']);
+                            if (!parsedOrderDate) {
+                                console.warn(`Skipping row due to invalid 'Data Pedido' for order ${orderNumber}.`);
+                                skippedCount++;
+                                continue;
+                            }
+
+                            const newOrder = {
+                                orderNumber,
+                                orderDate: parsedOrderDate.toISOString(),
+                                desiredDeliveryDate: parseDate(item['Data Desejada'])?.toISOString() || '',
+                                customer: item['Cliente'] || '',
+                                address: item['Endereço'] || '',
+                                city: item['Cidade'] || '',
+                                cep: item['CEP'] || '',
+                                firstPromisedDate: parseDate(item['Primeira Data Prometida'])?.toISOString() || '',
+                                currentPromisedDate: parseDate(item['Data Prometida Atual'])?.toISOString() || '',
+                                products: [], bom: [], mechanics: {}, electrical: {}, refrigeration: {},
+                                assembly: {}, shipping: {}, logistics: {}, invoice: {}, planning: {},
+                                purchasing: {}, warehouse: {}
+                            };
+
+                            const orderRef = firebase.doc(getOrdersCollection(), newOrder.orderNumber);
+                            batch.set(orderRef, newOrder);
+                            await addActivityToFirestore(newOrder.orderNumber, 'Sistema', 'Pedido importado');
+                            importedCount++;
+                        } catch (rowError) {
+                            console.error(`Error processing row:`, rowError);
+                            skippedCount++;
+                        }
+                    }
+                    await batch.commit();
+
+                } catch (fileError) {
+                    console.error('Error importing Excel file:', fileError);
+                    customAlert('Erro ao importar o arquivo. Verifique o formato do arquivo.');
+                    return;
+                }
+                customAlert(`Importação concluída.\n${importedCount} novos pedidos importados.\n${skippedCount} pedidos ignorados (inválidos, duplicados ou com erros).`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function addProductRow(product = { pn: '', description: '', quantity: 1 }) {
+            const tbody = document.getElementById('products-body');
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td><input type="text" class="form-control product-pn" value="${product.pn || ''}"></td>
+                <td><input type="text" class="form-control product-desc" value="${product.description || ''}"></td>
+                <td><input type="number" class="form-control product-qty" min="1" value="${product.quantity || 1}"></td>
+                <td><button class="btn btn-sm btn-danger remove-product">X</button></td>
+            `;
+            row.querySelector('.remove-product').addEventListener('click', () => row.remove());
+        }
+
+        function populateSalesForm(order) {
+            currentOrder = order;
+            document.getElementById('sales-order').value = order.orderNumber;
+            document.getElementById('sales-customer').value = order.customer;
+            document.getElementById('sales-address').value = order.address;
+            document.getElementById('sales-city').value = order.city;
+            document.getElementById('sales-cep').value = order.cep;
+            document.getElementById('sales-date').valueAsDate = parseDate(order.orderDate);
+            document.getElementById('sales-desired-date').valueAsDate = order.desiredDeliveryDate ? parseDate(order.desiredDeliveryDate) : null;
+
+            document.getElementById('products-body').innerHTML = '';
+            (order.products || []).forEach(p => addProductRow(p));
+            showAttachmentsForOrder('sales-attachments', order.orderNumber, 'Vendas');
+        }
+
+        function initDepartmentTab(dept) {
+            const orderSelect = document.getElementById(`${dept.id}-order`);
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                document.getElementById(`${dept.id}-order-info`).style.display = order ? 'block' : 'none';
+                if (order) {
+                    currentOrder = order;
+                    const data = order[dept.id] || {};
+                    document.getElementById(`${dept.id}-days`).value = data.days || '';
+                    document.getElementById(`${dept.id}-promised-date`).valueAsDate = data.promisedDate ? parseDate(data.promisedDate) : null;
+                    document.getElementById(`${dept.id}-notes`).value = data.notes || '';
+                    showAttachmentsForOrder(`${dept.id}-attachments`, order.orderNumber, dept.name);
+                } else {
+                    currentOrder = null;
+                }
+            });
+            document.getElementById(`${dept.id}-add-file`).addEventListener('click', () => {
+                if(!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+                document.getElementById(`${dept.id}-file-input`).click();
+            });
+            document.getElementById(`${dept.id}-file-input`).addEventListener('change', e => handleFileUpload(e, dept.name, `Arquivo ${dept.name}`, `${dept.id}-attachments`));
+            document.getElementById(`${dept.id}-save`).addEventListener('click', () => saveDepartmentData(dept));
+        }
+
+        async function saveDepartmentData(dept) {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const promisedDate = document.getElementById(`${dept.id}-promised-date`).value;
+            if (!promisedDate) { customAlert(`Preencha a data prometida para ${dept.name}.`); return; }
+
+            if(!currentOrder[dept.id]) currentOrder[dept.id] = {};
+
+            currentOrder[dept.id].days = parseInt(document.getElementById(`${dept.id}-days`).value) || null;
+            currentOrder[dept.id].promisedDate = promisedDate ? new Date(promisedDate).toISOString() : ''; // Ensure valid date string
+            currentOrder[dept.id].notes = document.getElementById(`${dept.id}-notes`).value;
+            currentOrder[dept.id].completed = true;
+
+            updateCurrentPromisedDate(currentOrder);
+
+            if(dept.id === 'assembly' && ['mechanics', 'electrical', 'refrigeration', 'assembly'].every(d => currentOrder[d]?.completed)) {
+                currentOrder.dateReady = new Date().toISOString();
+                await addActivityToFirestore(currentOrder.orderNumber, 'Montagem', 'Pronto para expedição');
+            }
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, dept.name, 'Informações atualizadas');
+            customAlert(`Dados de ${dept.name} salvos com sucesso!`);
+        }
+
+        function initMechanicsTab() { initDepartmentTab({id: 'mech', name: 'Mecânica'}); }
+        function initRefrigerationTab() { initDepartmentTab({id: 'refrig', name: 'Refrigeração'}); }
+        function initAssemblyTab() { initDepartmentTab({id: 'assembly', name: 'Montagem'}); }
+
+        function updateCurrentPromisedDate(order) {
+            const departmentDates = ['mechanics', 'electrical', 'refrigeration', 'assembly']
+                .map(d => order[d]?.promisedDate ? parseDate(order[d].promisedDate) : null)
+                .filter(d => d && !isNaN(d.getTime())); // Filter out invalid dates
+
+            const planningDates = [
+                order.firstPromisedDate, order.secondPromisedDate, order.thirdPromisedDate
+            ].filter(d => d).map(d => parseDate(d)).filter(d => d && !isNaN(d.getTime())); // Filter out invalid dates
+
+            const allDates = [...departmentDates, ...planningDates];
+
+            if(allDates.length > 0) {
+                const latestDate = new Date(Math.max.apply(null, allDates));
+                order.currentPromisedDate = latestDate.toISOString();
+            } else {
+                order.currentPromisedDate = ''; // Clear if no valid dates
+            }
+        }
+
+        function initShippingTab() {
+            const orderSelect = document.getElementById('shipping-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                document.getElementById('shipping-order-info').style.display = order ? 'block' : 'none';
+                if(order) {
+                    currentOrder = order;
+                    const data = order.shipping || {};
+                    document.getElementById('shipping-notes').value = data.notes || '';
+                    document.getElementById('packages-body').innerHTML = '';
+                    if (data.packages) {
+                        data.packages.forEach(p => addPackageRow(p));
+                    }
+                    showAttachmentsForOrder('shipping-attachments', order.orderNumber, 'Expedição');
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('add-package').addEventListener('click', () => addPackageRow());
+            document.getElementById('shipping-add-file').addEventListener('click', () => {
+                if(!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+                document.getElementById('shipping-file-input').click();
+            });
+            document.getElementById('shipping-file-input').addEventListener('change', e => handleFileUpload(e, 'Expedição', 'Arquivo Expedição', 'shipping-attachments'));
+            document.getElementById('shipping-save').addEventListener('click', saveShippingData);
+        }
+
+        function addPackageRow(pkg = { length: '', width: '', height: '', weight: '' }) {
+            const tbody = document.getElementById('packages-body');
+            const row = tbody.insertRow();
+            const index = tbody.rows.length;
+            row.innerHTML = `
+                <td>${index}</td>
+                <td><input type="number" class="form-control package-length" min="1" value="${pkg.length || ''}"></td>
+                <td><input type="number" class="form-control package-width" min="1" value="${pkg.width || ''}"></td>
+                <td><input type="number" class="form-control package-height" min="1" value="${pkg.height || ''}"></td>
+                <td><input type="number" class="form-control package-weight" min="0.1" step="0.1" value="${pkg.weight || ''}"></td>
+                <td><button class="btn btn-sm btn-danger remove-package">X</button></td>
+            `;
+            row.querySelector('.remove-package').addEventListener('click', () => {
+                row.remove();
+                tbody.querySelectorAll('tr').forEach((r, i) => r.cells[0].textContent = i + 1);
+            });
+        }
+
+        let currentSortColumn = -1;
+        let sortDirection = 1; // 1 for ascending, -1 for descending
+
+        function sortTable(columnIndex) {
+            const tbody = document.getElementById('orders-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // Toggle direction if clicking the same column
+            if (currentSortColumn === columnIndex) {
+                sortDirection *= -1;
+            } else {
+                currentSortColumn = columnIndex;
+                sortDirection = 1;
+            }
+
+            // Update header arrows
+            updateSortHeaders(columnIndex);
+
+            rows.sort((a, b) => {
+                const aValue = a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].textContent.trim();
+
+                // Special handling for date columns (1,2,4,5,8,9)
+                if ([1, 2, 4, 5, 8, 9].includes(columnIndex)) {
+                    const aDate = parseDateFromDisplay(aValue);
+                    const bDate = parseDateFromDisplay(bValue);
+
+                    if (aDate && bDate) {
+                        return (aDate - bDate) * sortDirection;
+                    }
+                    return 0;
+                }
+
+                // Special handling for numeric columns (6) - Note: in the original, this was 'Dias Atraso', which is not a direct column in the new table. Re-evaluate if needed.
+                // For now, assuming column 6 is not numeric for sorting.
+                // if (columnIndex === 6) {
+                //     const aNum = parseFloat(aValue) || 0;
+                //     const bNum = parseFloat(bValue) || 0;
+                //     return (aNum - bNum) * sortDirection;
+                // }
+
+                // Default string comparison
+                return aValue.localeCompare(bValue) * sortDirection;
+            });
+
+            // Rebuild the table
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function parseDateFromDisplay(dateStr) {
+            if (!dateStr || dateStr === '-') return null;
+
+            // Handle Brazilian date format (dd/mm/yyyy)
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            }
+
+            return new Date(dateStr);
+        }
+
+        function updateSortHeaders(activeColumn) {
+            const headers = document.querySelectorAll('#orders-table th');
+
+            headers.forEach((header, index) => {
+                // Remove all arrows
+                header.innerHTML = header.innerHTML.replace(/ ▲| ▼/g, '');
+
+                // Add arrow to active column
+                if (index === activeColumn) {
+                    header.innerHTML += sortDirection === 1 ? ' ▲' : ' ▼';
+                }
+            });
+        }
+
+        async function saveShippingData() {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const packages = [];
+            document.getElementById('packages-body').querySelectorAll('tr').forEach(row => {
+                packages.push({
+                    length: parseFloat(row.querySelector('.package-length').value),
+                    width: parseFloat(row.querySelector('.package-width').value),
+                    height: parseFloat(row.querySelector('.package-height').value),
+                    weight: parseFloat(row.querySelector('.package-weight').value)
+                });
+            });
+
+            if (packages.some(p => isNaN(p.length) || isNaN(p.width) || isNaN(p.height) || isNaN(p.weight))) {
+                customAlert('Preencha todos os campos dos volumes com números válidos.');
+                return;
+            }
+
+            currentOrder.shipping = {
+                notes: document.getElementById('shipping-notes').value,
+                packages,
+                completed: packages.length > 0
+            };
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Expedição', 'Informações de expedição salvas');
+            customAlert('Dados de expedição salvos com sucesso!');
+        }
+
+        async function confirmShipment() {
+            if(!currentOrder) return;
+
+            const carrier = document.getElementById('shipment-carrier').value;
+            const tracking = document.getElementById('shipment-tracking').value;
+
+            if (!carrier || !tracking) {
+                customAlert('Preencha a transportadora e o número de rastreamento.');
+                return;
+            }
+
+            currentOrder.freightCompany = carrier;
+            currentOrder.trackingNumber = tracking;
+            currentOrder.shipmentDate = new Date().toISOString();
+            if(!currentOrder.shipping) currentOrder.shipping = {};
+            currentOrder.shipping.completed = true;
+
+            closeModal('shipment-modal');
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Expedição', `Enviado via ${carrier}`);
+            customAlert('Envio confirmado com sucesso!');
+        }
+
+        function initLogisticsTab() {
+            const orderSelect = document.getElementById('logistics-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                document.getElementById('logistics-order-info').style.display = order ? 'block' : 'none';
+                if(order) {
+                    currentOrder = order;
+                    document.getElementById('logistics-customer').value = order.customer;
+                    document.getElementById('logistics-address').value = `${order.address}, ${order.city} - ${order.cep}`;
+
+                    const packagesBody = document.getElementById('logistics-packages-body');
+                    packagesBody.innerHTML = '';
+                    if (order.shipping?.packages) {
+                        order.shipping.packages.forEach((p, i) => {
+                            const row = packagesBody.insertRow();
+                            row.innerHTML = `<td>${i+1}</td><td>${p.length}x${p.width}x${p.height}</td><td>${p.weight}</td>`;
+                        });
+                    }
+
+                    const data = order.logistics || {};
+                    document.getElementById('logistics-notes').value = data.notes || '';
+                    document.getElementById('logistics-carrier').value = order.freightCompany || data.carrier || '';
+                    document.getElementById('logistics-cost').value = (order.freightCost || data.cost || '').toString();
+
+                    showAttachmentsForOrder('logistics-attachments', order.orderNumber, 'Logística');
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('logistics-add-file').addEventListener('click', () => {
+                if(!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+                document.getElementById('logistics-file-input').click();
+            });
+            document.getElementById('logistics-file-input').addEventListener('change', e => handleFileUpload(e, 'Logística', 'Arquivo Logística', 'logistics-attachments'));
+            document.getElementById('logistics-save').addEventListener('click', saveLogisticsData);
+        }
+
+        async function saveLogisticsData() {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const cost = parseFloat(document.getElementById('logistics-cost').value);
+            const carrier = document.getElementById('logistics-carrier').value;
+
+            currentOrder.logistics = {
+                notes: document.getElementById('logistics-notes').value,
+                carrier: carrier,
+                cost: isNaN(cost) ? 0 : cost,
+                completed: true
+            };
+            currentOrder.freightCompany = carrier;
+            currentOrder.freightCost = isNaN(cost) ? 0 : cost;
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Logística', 'Informações de logística salvas');
+            customAlert('Dados de logística salvos com sucesso!');
+        }
+
+        function initInvoiceTab() {
+            const orderSelect = document.getElementById('invoice-order');
+            orderSelect.addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                document.getElementById('invoice-order-info').style.display = order ? 'block' : 'none';
+                if (order) {
+                    currentOrder = order;
+                    document.getElementById('invoice-customer').value = order.customer;
+                    document.getElementById('invoice-address').value = `${order.address}, ${order.city} - ${order.cep}`;
+                    document.getElementById('invoice-carrier').value = order.freightCompany || '';
+                    document.getElementById('invoice-cost').value = (order.freightCost || 0).toFixed(2);
+                    document.getElementById('invoice-number').value = order.invoiceNumber || '';
+
+                    const productsBody = document.getElementById('invoice-products-body');
+                    productsBody.innerHTML = '';
+                    (order.products || []).forEach(p => {
+                        const row = productsBody.insertRow();
+                        row.innerHTML = `
+                            <td>${p.pn}</td>
+                            <td>${p.description}</td>
+                            <td>${p.quantity}</td>
+                            <td><input type="number" class="form-control product-price" min="0" step="0.01" value="${p.price || ''}"></td>
+                            <td class="product-total">${(p.price && p.quantity) ? (p.price * p.quantity).toFixed(2) : '0.00'}</td>`;
+                    });
+                    productsBody.querySelectorAll('.product-price').forEach((input, index) => {
+                        input.addEventListener('input', () => {
+                            const quantity = order.products[index].quantity;
+                            const price = parseFloat(input.value) || 0;
+                            input.closest('tr').querySelector('.product-total').textContent = (quantity * price).toFixed(2);
+                        });
+                    });
+
+                    showAttachmentsForOrder('invoice-attachments', order.orderNumber, 'Faturamento');
+                } else {
+                    currentOrder = null;
+                }
+            });
+
+            document.getElementById('invoice-add-file').addEventListener('click', () => {
+                if(!currentOrder) { customAlert('Selecione um pedido primeiro.'); return; }
+                document.getElementById('invoice-file-input').click();
+            });
+            document.getElementById('invoice-file-input').addEventListener('change', e => handleFileUpload(e, 'Faturamento', 'Arquivo Faturamento', 'invoice-attachments'));
+            document.getElementById('invoice-save').addEventListener('click', saveInvoiceData);
+        }
+
+        async function saveInvoiceData() {
+            if (!currentOrder) { customAlert('Selecione um pedido.'); return; }
+
+            const invoiceNumber = document.getElementById('invoice-number').value;
+            if (!invoiceNumber) { customAlert('Insira o número da fatura.'); return; }
+
+            document.getElementById('invoice-products-body').querySelectorAll('tr').forEach((row, index) => {
+                const price = parseFloat(row.querySelector('.product-price').value);
+                if (!isNaN(price)) {
+                    currentOrder.products[index].price = price;
+                }
+            });
+
+            currentOrder.invoiceNumber = invoiceNumber;
+            currentOrder.invoice = { completed: true, notes: `Fatura ${invoiceNumber}` };
+
+            await saveOrderToFirestore(currentOrder);
+            await addActivityToFirestore(currentOrder.orderNumber, 'Faturamento', `Fatura ${invoiceNumber} salva.`);
+            customAlert('Dados de faturamento salvos com sucesso!');
+        }
+
+        function initGanttTab() {
+            document.getElementById('gantt-order').addEventListener('change', function() {
+                const order = ordersData.find(o => o.orderNumber === this.value);
+                document.getElementById('gantt-chart-container').style.display = order ? 'block' : 'none';
+                if (order) renderGanttChart('gantt-chart', order);
+            });
+        }
+
+        function renderGanttChart(canvasId, order) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            // Destroy existing chart instance if it exists
+            if (chartInstances[canvasId]) {
+                chartInstances[canvasId].destroy();
+                chartInstances[canvasId] = null; // Clear the reference
+            }
+
+            const tasks = [];
+            const orderStartDate = parseDate(order.orderDate);
+
+            // Ensure orderStartDate is a valid Date object
+            if (!orderStartDate || isNaN(orderStartDate.getTime())) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px "Segoe UI"'; ctx.fillStyle = '#6c757d'; ctx.textAlign = 'center';
+                ctx.fillText('Data de início do pedido é inválida ou ausente.', canvas.width / 2, 50);
+                return;
+            }
+
+            const desiredDate = parseDate(order.desiredDeliveryDate);
+            // Ensure desiredDate is a valid Date object before adding to tasks
+            if (desiredDate && !isNaN(desiredDate.getTime()) && desiredDate >= orderStartDate) {
+                tasks.push({ name: 'Prazo Vendas', start: orderStartDate, end: desiredDate, color: 'rgba(54, 162, 235, 0.7)' });
+            }
+
+            ['mechanics', 'electrical', 'refrigeration', 'assembly'].forEach(id => {
+                const promisedDate = parseDate(order[id]?.promisedDate);
+                // Ensure promisedDate is a valid Date object before adding to tasks
+                if (promisedDate && !isNaN(promisedDate.getTime()) && promisedDate >= orderStartDate) {
+                    const name = {mechanics: 'Mecânica', electrical: 'Elétrica', refrigeration: 'Refrigeração', assembly: 'Montagem'}[id];
+                    // For single point dates, create a small duration for visibility
+                    const endDate = new Date(promisedDate.getTime() + (24 * 60 * 60 * 1000)); // Add 1 day for visibility
+                    tasks.push({ name: `Prazo ${name}`, start: promisedDate, end: endDate, color: 'rgba(255, 99, 132, 0.7)' });
+                }
+            });
+
+            if (tasks.length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px "Segoe UI"'; ctx.fillStyle = '#6c757d'; ctx.textAlign = 'center';
+                ctx.fillText('Não há datas de tarefas válidas para exibir o gráfico.', canvas.width / 2, 50);
+                return;
+            }
+
+            const labels = tasks.map(t => t.name);
+            const datasets = [{
+                data: tasks.map(t => ({ x: [t.start.getTime(), t.end.getTime()], y: t.name })),
+                backgroundColor: tasks.map(t => t.color),
+                barPercentage: 0.5
+            }];
+
+            chartInstances[canvasId] = new Chart(ctx, {
+                type: 'bar', data: { labels, datasets },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'dd/MM/yyyy',
+                                displayFormats: {
+                                    day: 'dd/MM'
+                                }
+                            },
+                            min: Math.min(...tasks.map(t => t.start.getTime())) - (24 * 60 * 60 * 1000 * 5), // Add buffer
+                            max: Math.max(...tasks.map(t => t.end.getTime())) + (24 * 60 * 60 * 1000 * 5) // Add buffer
+                        }
+                    },
+                    plugins: { legend: { display: false }}
+                }
+            });
+        }
+
+        function showAttachmentsForOrder(containerId, orderNumber, department) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            const attachments = attachmentsData.filter(a => a.orderNumber === orderNumber && a.department === department);
+
+            if (attachments.length === 0) { container.innerHTML = '<p>Nenhum anexo.</p>'; return; }
+
+            attachments.forEach(att => {
+                const item = document.createElement('div');
+                item.className = 'attachment-item';
+                item.innerHTML = `<h4>${att.name}</h4><p>Dept: ${att.department}</p><div class="attachment-actions"><button class="btn btn-sm download-attachment" data-id="${att.id}">Download</button> <button class="btn btn-sm btn-danger delete-attachment" data-id="${att.id}">Excluir</button></div>`;
+                container.appendChild(item);
+            });
+
+            container.querySelectorAll('.download-attachment').forEach(b => b.addEventListener('click', e => downloadAttachment(e.target.getAttribute('data-id'))));
+            container.querySelectorAll('.delete-attachment').forEach(b => b.addEventListener('click', e => deleteAttachment(e.target.getAttribute('data-id'), orderNumber)));
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        async function handleFileUpload(event, department, fileType, containerId) {
+            const file = event.target.files[0];
+            if (!file || !currentOrder) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const attachment = {
+                    id: generateId(), // Firestore will generate its own ID, but this is for local reference
+                    orderNumber: currentOrder.orderNumber,
+                    department,
+                    name: file.name,
+                    type: fileType,
+                    size: file.size,
+                    date: new Date().toISOString(),
+                    data: e.target.result // Base64 encoded file data
+                };
+
+                await addAttachmentToFirestore(attachment);
+
+                showAttachmentsForOrder(containerId, currentOrder.orderNumber, department);
+
+                await addActivityToFirestore(currentOrder.orderNumber, department, `Anexo: ${file.name}`);
+                customAlert(`Arquivo "${file.name}" anexado com sucesso!`);
+            };
+            reader.readAsDataURL(file);
+            event.target.value = ''; // Clear the file input
+        }
+    </script>
+</body>
+</html>
