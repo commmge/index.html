@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM de Vendas (Produção)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        /* Your existing CSS styles */
+        :root {
+            --primary: #2c3e50; --secondary: #34495e; --accent: #e74c3c; --light: #ecf0f1;
+            --success: #2ecc71; --warning: #f39c12; --danger: #c0392b; --text: #333; --text-light: #fff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; }
+        .container { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+        .sidebar { background: var(--primary); color: var(--text-light); padding: 20px 0; position: fixed; width: 250px; height: 100vh; overflow-y: auto; transition: transform 0.3s ease-in-out; }
+        .logo { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; }
+        .logo h1 { font-size: 24px; font-weight: 600; }
+        .menu { list-style: none; padding: 0 15px; }
+        .menu-item { margin-bottom: 5px; }
+        .menu-link { display: flex; align-items: center; padding: 12px 15px; color: var(--text-light); text-decoration: none; border-radius: 5px; transition: all 0.3s ease; }
+        .menu-link:hover, .menu-link.active { background: var(--secondary); }
+        .menu-link i { margin-right: 10px; font-size: 18px; }
+        .main { grid-column: 2; padding: 20px; transition: margin-left 0.3s ease-in-out; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #ddd; }
+        .page-title { font-size: 24px; font-weight: 600; }
+        .action-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+        .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; transition: all 0.3s ease; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        .dashboard-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 600; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .filters { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .filter-group { flex: 1; min-width: 200px; }
+        .filter-label { display: block; margin-bottom: 5px; font-weight: 500; }
+        .filter-select, .filter-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .data-table-container { overflow-x: auto; }
+        .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .data-table th, .data-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; white-space: nowrap; }
+        .data-table th { background: var(--primary); color: white; font-weight: 500; cursor: pointer; }
+        .data-table th .sort-icon { margin-left: 5px; opacity: 0.5; }
+        .data-table th.sorted .sort-icon { opacity: 1; }
+        .data-table tr:hover { background: #f9f9f9; }
+        .data-table .actions-cell { display: flex; gap: 5px; }
+        .comment-cell { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .heatmap-cell { display: flex; align-items: center; gap: 10px; }
+        .heatmap-bar-container { width: 100px; height: 10px; background-color: #eee; border-radius: 5px; }
+        .heatmap-bar { height: 100%; border-radius: 5px; }
+        .heatmap-value { font-weight: bold; }
+        .status-badge { padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: 500; color: white; text-transform: capitalize; }
+        .status-aberto { background: #f39c12; }
+        .status-cotação { background: #3498db; }
+        .status-negociação { background: #8e44ad; }
+        .status-fechado { background: #2ecc71; }
+        .status-perdido { background: #e74c3c; }
+        .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .chart-container { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 10px; width: 90%; max-width: 600px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .modal-title { font-size: 20px; font-weight: 600; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; }
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; margin-bottom: 5px; font-weight: 500; }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .form-textarea { min-height: 80px; resize: vertical; }
+        .tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab.active { border-bottom: 3px solid var(--primary); font-weight: 600; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .kpi-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
+        .kpi-value { font-size: 28px; font-weight: 700; margin: 10px 0; color: var(--primary); }
+        .kpi-label { font-size: 14px; color: #777; }
+        .notification { position: fixed; top: 20px; right: 20px; padding: 15px 20px; border-radius: 5px; background: var(--success); color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transform: translateX(120%); transition: transform 0.3s ease-in-out; z-index: 1100; }
+        .notification.show { transform: translateX(0); }
+        .mobile-menu-btn { display: none; background: var(--primary); color: white; border: none; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; cursor: pointer; position: fixed; top: 15px; left: 15px; z-index: 999; }
+        @media (max-width: 992px) {
+            .container { grid-template-columns: 1fr; }
+            .sidebar { transform: translateX(-100%); z-index: 1000; }
+            .sidebar.active { transform: translateX(0); }
+            .main { grid-column: 1; margin-left: 0; padding-top: 70px; }
+            .mobile-menu-btn { display: block; }
+            .charts { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="logo">
+                <h1>CRM de Vendas</h1>
+            </div>
+            <ul class="menu">
+                <li class="menu-item"><a href="#" class="menu-link active" data-tab="dashboard"><i class="fas fa-home"></i> Dashboard</a></li>
+                <li class="menu-item"><a href="#" class="menu-link" data-tab="sales-funnel"><i class="fas fa-chart-line"></i> Funil de Vendas</a></li>
+                <li class="menu-item"><a href="#" class="menu-link" data-tab="kpis"><i class="fas fa-tachometer-alt"></i> KPIs</a></li>
+                <li class="menu-item"><a href="#" class="menu-link" data-tab="management"><i class="fas fa-tasks"></i> Gerenciamento</a></li>
+                <li class="menu-item"><a href="#" class="menu-link" data-tab="reports"><i class="fas fa-chart-pie"></i> Relatórios</a></li>
+                <li class="menu-item"><a href="#" class="menu-link" data-tab="settings"><i class="fas fa-cog"></i> Configurações</a></li>
+            </ul>
+        </div>
+
+        <div class="main" id="main-content">
+            <button class="mobile-menu-btn" id="mobileMenuBtn"><i class="fas fa-bars"></i></button>
+            <div class="header">
+                <h2 class="page-title">Dashboard de Vendas</h2>
+                <div id="dashboard-actions" class="action-buttons">
+                    <button class="btn btn-primary" id="addOfferBtn"><i class="fas fa-plus"></i> Nova Proposta</button>
+                </div>
+            </div>
+            
+            <div class="tab-content active" id="dashboard">
+                <div class="dashboard-cards">
+                    <div class="card"><h3 class="card-header">Total de Propostas</h3><div class="card-body"><h4 id="total-offers" class="kpi-value">0</h4></div></div>
+                    <div class="card"><h3 class="card-header">Valor Total</h3><div class="card-body"><h4 id="total-value" class="kpi-value">R$0</h4></div></div>
+                    <div class="card"><h3 class="card-header">Taxa de Conversão</h3><div class="card-body"><h4 id="conversion-rate" class="kpi-value">0%</h4></div></div>
+                </div>
+                <div class="filters">
+                    <div class="filter-group"><label class="filter-label">Vendedor</label><select class="filter-select" id="salesPersonFilter"></select></div>
+                    <div class="filter-group"><label class="filter-label">Status</label><select class="filter-select" id="statusFilter"></select></div>
+                    <div class="filter-group"><label class="filter-label">Heatmap</label><select class="filter-select" id="heatmapFilter"></select></div>
+                    <div class="filter-group"><label class="filter-label">Mercado</label><select class="filter-select" id="marketFilter"></select></div>
+                </div>
+                <div class="data-table-container">
+                    <table class="data-table" id="offersTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="offerNumber">Proposta # <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="salesPerson">Vendedor <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="customer">Cliente <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="market">Mercado <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="value">Valor <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="offerDate">Data da Proposta <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="closingDate">Data de Fechamento <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="heatmap">Heatmap <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="status">Status <i class="fas fa-sort sort-icon"></i></th>
+                                <th data-sort="reminderDate">Lembrete <i class="fas fa-sort sort-icon"></i></th>
+                                <th>Comentários</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-content" id="sales-funnel"><div class="chart-container"><h3 class="card-header">Funil de Vendas por Etapa</h3><canvas id="funnelDetailChart"></canvas></div></div>
+            <div class="tab-content" id="kpis"><div class="card"><div class="card-header">Análise de KPIs<button class="btn btn-primary" id="exportKpisPdf"><i class="fas fa-file-pdf"></i> Exportar para PDF</button></div><div id="kpi-details-grid" class="kpi-grid"></div></div></div>
+            <div class="tab-content" id="management">
+                <div class="tabs"><div class="tab active" data-subtab="sales-team">Equipe de Vendas</div><div class="tab" data-subtab="customers">Clientes</div></div>
+                <div class="tab-content active" id="sales-team"><button class="btn btn-primary" id="addSalesPersonBtn"><i class="fas fa-plus"></i> Adicionar Vendedor</button><div class="data-table-container"><table class="data-table" id="salesTeamTable"><thead><tr><th>Nome</th><th>Email</th><th>Ações</th></tr></thead><tbody></tbody></table></div></div>
+                <div class="tab-content" id="customers"><button class="btn btn-primary" id="addCustomerBtn"><i class="fas fa-plus"></i> Adicionar Cliente</button><div class="data-table-container"><table class="data-table" id="customersTable"><thead><tr><th>Nome</th><th>Setor</th><th>Ações</th></tr></thead><tbody></tbody></table></div></div>
+            </div>
+            <div class="tab-content" id="reports"><div class="card"><div class="card-header">Relatórios de Vendas<button class="btn btn-primary" id="exportReportsPdf"><i class="fas fa-file-pdf"></i> Exportar para PDF</button></div><div class="charts"><div class="chart-container"><h3 class="card-header">Vendas por Mercado</h3><canvas id="marketChart"></canvas></div><div class="chart-container"><h3 class="card-header">Vendas por Vendedor</h3><canvas id="salesPersonChart"></canvas></div></div><div class="kpi-grid" id="kpi-grid-reports"></div></div></div>
+            
+            <div class="tab-content" id="settings">
+                 <div class="card">
+                    <h3 class="card-header">Gerenciamento do Banco de Dados</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" id="importXlsxBtn"><i class="fas fa-file-excel"></i> Importar (XLSX)</button>
+                        <button class="btn btn-primary" id="exportXlsxBtn"><i class="fas fa-file-excel"></i> Exportar (XLSX)</button>
+                        <button class="btn btn-warning" id="exportJsonBtn"><i class="fas fa-file-export"></i> Exportar (JSON)</button>
+                        <button class="btn btn-danger" id="clearDbBtn"><i class="fas fa-trash-alt"></i> Limpar Todos os Dados</button>
+                    </div>
+                    <small style="display:block; margin-top:10px;">A importação substituirá todos os dados existentes. Exporte uma cópia de segurança primeiro.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="offerModal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Adicionar/Editar Proposta</h3><button class="modal-close">&times;</button></div><form id="offerForm"><input type="hidden" id="editOfferId"><div class="form-group"><label class="form-label">Vendedor</label><select class="form-select" id="salesPersonSelect" required></select></div><div class="form-group"><label class="form-label">Cliente</label><select class="form-select" id="customerSelect" required></select></div><div class="form-group"><label class="form-label">Mercado</label><select class="form-select" id="marketSelect" required></select></div><div class="form-group"><label class="form-label">Valor da Proposta</label><input type="number" class="form-input" id="offerValueInput" required></div><div class="form-group"><label class="form-label">Data da Proposta</label><input type="date" class="form-input" id="offerDateInput" required></div><div class="form-group"><label class="form-label">Data Estimada de Fechamento</label><input type="date" class="form-input" id="closingDateInput" required></div><div class="form-group"><label class="form-label">Data de Lembrete</label><input type="date" class="form-input" id="reminderDateInput"></div><div class="form-group"><label class="form-label">Heatmap (1-10)</label><input type="number" class="form-input" id="heatmapInput" min="1" max="10" required></div><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="statusSelect" required></select></div><div class="form-group"><label class="form-label">Comentários</label><textarea class="form-textarea" id="commentsInput"></textarea></div><button type="submit" class="btn btn-primary">Salvar Proposta</button></form></div></div>
+    <div class="modal" id="salesPersonModal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Adicionar/Editar Vendedor</h3><button class="modal-close">&times;</button></div><form id="salesPersonForm"><input type="hidden" id="editSalesPersonId"><div class="form-group"><label class="form-label">Nome</label><input type="text" class="form-input" id="salesPersonName" required></div><div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="salesPersonEmail" required></div><button type="submit" class="btn btn-primary">Salrar Vendedor</button></form></div></div>
+    <div class="modal" id="customerModal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Adicionar/Editar Cliente</h3><button class="modal-close">&times;</button></div><form id="customerForm"><input type="hidden" id="editCustomerId"><div class="form-group"><label class="form-label">Nome</label><input type="text" class="form-input" id="customerName" required></div><div class="form-group"><label class="form-label">Setor</label><input type="text" class="form-input" id="customerIndustry" required></div><button type="submit', class="btn btn-primary">Salvar Cliente</button></form></div></div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAfL4-_B9_sV1WKwZqHhsWxH9xPfysEHVk",
+        authDomain: "crm-mge.firebaseapp.com",
+        projectId: "crm-mge",
+        storageBucket: "crm-mge.appspot.com",
+        messagingSenderId: "520336828101",
+        appId: "1:520336828101:web:6740003050125e424132ac",
+        measurementId: "G-186RYW248T"
+    };
+
+    // Inicializa o Firebase
+    firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- DATA MANAGEMENT & STATE ---
+        let db = { offers: [], salesTeam: [], customers: [] };
+        let sortState = { column: 'offerNumber', direction: 'asc' };
+        
+        const MARKETS = ['Conforto', 'Industrial', 'Precisão', 'Hospitalar', 'Data Center', 'Produtos Customizados'];
+        const STATUSES = {'aberto': 'Aberto', 'cotação': 'Cotação', 'negociação': 'Negociação Final', 'fechado': 'Fechado', 'perdido': 'Perdido'};
+        const HEATMAP_RANGES = { '': 'Todos', '1-3': 'Baixo (1-3)', '4-7': 'Médio (4-7)', '8-10': 'Alto (8-10)' };
+
+        // --- FUNÇÕES DE BANCO DE DADOS (FIRESTORE) ---
+        async function loadDb() {
+            showNotification("Carregando dados da nuvem...");
+            try {
+                const [salesTeamSnap, customersSnap, offersSnap] = await Promise.all([
+                    firestore.collection('salesTeam').orderBy('name').get(),
+                    firestore.collection('customers').orderBy('name').get(),
+                    firestore.collection('offers').get()
+                ]);
+
+                db.salesTeam = salesTeamSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                db.customers = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                db.offers = offersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                renderAll();
+                showNotification("Dados carregados com sucesso!", false);
+            } catch (error) {
+                console.error("Erro ao carregar dados do Firestore: ", error);
+                showNotification("Erro ao carregar dados. Verifique o console.", true);
+            }
+        }
+
+        const formatCurrency = (val) => `R$${(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const generateOfferNumber = () => `PROP-${new Date().getFullYear()}-${String(db.offers.length + 1).padStart(3, '0')}`;
+        const getById = (arr, id) => arr.find(item => item.id === id);
+        
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.background = isError ? 'var(--danger)' : 'var(--success)';
+            notification.classList.add('show');
+            setTimeout(() => notification.classList.remove('show'), 3000);
+        }
+
+        function renderAll() {
+            populateAllDropdowns();
+            renderOffersTable();
+            renderSalesTeamTable();
+            renderCustomersTable();
+            updateAllCharts();
+            updateKPIs('kpi-grid-reports');
+            renderKpiPage();
+        }
+        
+        function populateSelect(elementId, data, options = {}) {
+            const { key = 'id', value = 'name', placeholder = 'Todos' } = options;
+            const select = document.getElementById(elementId);
+            select.innerHTML = `<option value="">${placeholder}</option>`;
+            data.forEach(item => {
+                select.innerHTML += `<option value="${item[key]}">${item[value]}</option>`;
+            });
+        }
+        
+        function populateStaticSelect(elementId, data, placeholder) {
+            const select = document.getElementById(elementId);
+            let optionsHtml = placeholder ? `<option value="">${placeholder}</option>` : '';
+            if (Array.isArray(data)) {
+                data.forEach(item => optionsHtml += `<option value="${item}">${item}</option>`);
+            } else {
+                Object.entries(data).forEach(([key, value]) => optionsHtml += `<option value="${key}">${value}</option>`);
+            }
+            select.innerHTML = optionsHtml;
+        }
+
+        function populateAllDropdowns() {
+            populateSelect('salesPersonFilter', db.salesTeam, { placeholder: 'Todos os Vendedores' });
+            populateStaticSelect('statusFilter', {...{'': 'Todos os Status'}, ...STATUSES});
+            populateStaticSelect('heatmapFilter', HEATMAP_RANGES);
+            populateStaticSelect('marketFilter', {...{'': 'Todos os Mercados'}, ...MARKETS.reduce((acc, m) => ({...acc, [m]: m}), {})});
+            
+            populateSelect('salesPersonSelect', db.salesTeam, { placeholder: 'Selecione um Vendedor' });
+            populateSelect('customerSelect', db.customers, { placeholder: 'Selecione um Cliente' });
+            populateStaticSelect('marketSelect', MARKETS, 'Selecione um Mercado');
+            populateStaticSelect('statusSelect', STATUSES, 'Selecione um Status');
+        }
+
+        function renderOffersTable() {
+            const tableBody = document.querySelector('#offersTable tbody');
+            tableBody.innerHTML = '';
+            
+            const filters = {
+                salesPerson: document.getElementById('salesPersonFilter').value,
+                status: document.getElementById('statusFilter').value,
+                heatmap: document.getElementById('heatmapFilter').value,
+                market: document.getElementById('marketFilter').value,
+            };
+
+            let filteredOffers = db.offers.filter(offer => {
+                const heatmapMatch = !filters.heatmap || 
+                    (filters.heatmap === '1-3' && offer.heatmap <= 3) ||
+                    (filters.heatmap === '4-7' && offer.heatmap >= 4 && offer.heatmap <= 7) ||
+                    (filters.heatmap === '8-10' && offer.heatmap >= 8);
+                return (!filters.salesPerson || offer.salesPersonId == filters.salesPerson) &&
+                       (!filters.status || offer.status === filters.status) &&
+                       (!filters.market || offer.market === filters.market) &&
+                       heatmapMatch;
+            });
+
+            filteredOffers.sort((a, b) => {
+                let valA, valB;
+                if (sortState.column === 'salesPerson') {
+                    valA = getById(db.salesTeam, a.salesPersonId)?.name || '';
+                    valB = getById(db.salesTeam, b.salesPersonId)?.name || '';
+                } else if (sortState.column === 'customer') {
+                    valA = getById(db.customers, a.customerId)?.name || '';
+                    valB = getById(db.customers, b.customerId)?.name || '';
+                } else {
+                    valA = a[sortState.column];
+                    valB = b[sortState.column];
+                }
+
+                if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+                if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            filteredOffers.forEach(offer => {
+                const salesPerson = getById(db.salesTeam, offer.salesPersonId)?.name || 'N/A';
+                const customer = getById(db.customers, offer.customerId)?.name || 'N/A';
+                
+                let heatmapColor;
+                if (offer.heatmap >= 8) heatmapColor = '#2ecc71';
+                else if (offer.heatmap >= 4) heatmapColor = '#f39c12';
+                else heatmapColor = '#e74c3c';
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${offer.offerNumber}</td> <td>${salesPerson}</td> <td>${customer}</td> <td>${offer.market}</td>
+                    <td>${formatCurrency(offer.value)}</td>
+                    <td>${offer.offerDate ? new Date(offer.offerDate + 'T00:00:00').toLocaleDateString('pt-BR') : ''}</td>
+                    <td>${offer.closingDate ? new Date(offer.closingDate + 'T00:00:00').toLocaleDateString('pt-BR') : ''}</td>
+                    <td><div class="heatmap-cell"><div class="heatmap-bar-container"><div class="heatmap-bar" style="width: ${offer.heatmap * 10}%; background-color: ${heatmapColor};"></div></div><span class="heatmap-value">${offer.heatmap}</span></div></td>
+                    <td><span class="status-badge status-${offer.status.replace(' ', '-')}">${STATUSES[offer.status] || offer.status}</span></td>
+                    <td>${offer.reminderDate ? new Date(offer.reminderDate + 'T00:00:00').toLocaleDateString('pt-BR') : ''}</td>
+                    <td class="comment-cell" title="${offer.comments || ''}">${offer.comments || ''}</td>
+                    <td class="actions-cell">
+                        <button class="btn btn-primary btn-sm" onclick="handleEditOffer('${offer.id}')" title="Editar"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-danger btn-sm" onclick="handleDelete('offers', '${offer.id}')" title="Apagar"><i class="fas fa-trash"></i></button>
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+            updateDashboardCards(filteredOffers);
+            updateSortIcons();
+        }
+        
+        function updateSortIcons() {
+            document.querySelectorAll('#offersTable th[data-sort]').forEach(th => {
+                th.classList.remove('sorted');
+                const icon = th.querySelector('.sort-icon');
+                icon.className = 'fas fa-sort sort-icon';
+            });
+            const activeTh = document.querySelector(`#offersTable th[data-sort="${sortState.column}"]`);
+            if (activeTh) {
+                activeTh.classList.add('sorted');
+                const icon = activeTh.querySelector('.sort-icon');
+                icon.className = sortState.direction === 'asc' ? 'fas fa-sort-up sort-icon' : 'fas fa-sort-down sort-icon';
+            }
+        }
+
+        function renderSalesTeamTable() {
+            const tableBody = document.querySelector('#salesTeamTable tbody');
+            tableBody.innerHTML = '';
+            db.salesTeam.forEach(person => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${person.name}</td><td>${person.email}</td>
+                    <td class="actions-cell">
+                        <button class="btn btn-primary btn-sm" onclick="handleEditSalesPerson('${person.id}')"><i class="fas fa-edit"></i> Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="handleDelete('salesTeam', '${person.id}')"><i class="fas fa-trash"></i> Apagar</button>
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function renderCustomersTable() {
+            const tableBody = document.querySelector('#customersTable tbody');
+            tableBody.innerHTML = '';
+            db.customers.forEach(customer => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${customer.name}</td><td>${customer.industry}</td>
+                    <td class="actions-cell">
+                        <button class="btn btn-primary btn-sm" onclick="handleEditCustomer('${customer.id}')"><i class="fas fa-edit"></i> Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="handleDelete('customers', '${customer.id}')"><i class="fas fa-trash"></i> Apagar</button>
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateDashboardCards(filteredOffers = db.offers) {
+            document.getElementById('total-offers').textContent = filteredOffers.length;
+            const totalValue = filteredOffers.reduce((sum, offer) => sum + offer.value, 0);
+            document.getElementById('total-value').textContent = formatCurrency(totalValue);
+            const closedOffers = filteredOffers.filter(offer => offer.status === 'fechado').length;
+            const conversionRate = filteredOffers.length > 0 ? ((closedOffers / filteredOffers.length) * 100).toFixed(1) : 0;
+            document.getElementById('conversion-rate').textContent = `${conversionRate}%`;
+        }
+        
+        let charts = {};
+        function createOrUpdateChart(chartId, type, data, options) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            if (charts[chartId]) { charts[chartId].destroy(); }
+            charts[chartId] = new Chart(ctx, { type, data, options });
+        }
+
+        function updateAllCharts() {
+            const funnelData = Object.keys(STATUSES).map(status => db.offers.filter(o => o.status === status).length);
+            createOrUpdateChart('funnelDetailChart', 'bar', { labels: Object.values(STATUSES), datasets: [{ label: '# de Propostas', data: funnelData, backgroundColor: ['#f39c12', '#3498db', '#8e44ad', '#2ecc71', '#e74c3c'] }] }, { indexAxis: 'y', responsive: true });
+            const marketData = MARKETS.map(market => db.offers.filter(o => o.market === market).reduce((sum, o) => sum + o.value, 0));
+            createOrUpdateChart('marketChart', 'pie', { labels: MARKETS, datasets: [{ label: 'Vendas por Mercado', data: marketData, backgroundColor: ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c'] }] }, { responsive: true });
+            const salesPersonData = db.salesTeam.map(p => db.offers.filter(o => o.salesPersonId === p.id && o.status === 'fechado').reduce((sum, o) => sum + o.value, 0));
+            createOrUpdateChart('salesPersonChart', 'bar', { labels: db.salesTeam.map(p => p.name), datasets: [{ label: 'Valor Fechado em Vendas', data: salesPersonData, backgroundColor: '#2c3e50' }] }, { responsive: true });
+        }
+        
+        function updateKPIs(gridId) {
+            const kpiGrid = document.getElementById(gridId);
+            if (!kpiGrid) return; kpiGrid.innerHTML = '';
+            db.salesTeam.forEach(person => {
+                const personOffers = db.offers.filter(o => o.salesPersonId === person.id);
+                const closedOffers = personOffers.filter(o => o.status === 'fechado').length;
+                const conversionRate = personOffers.length > 0 ? ((closedOffers / personOffers.length) * 100).toFixed(1) : 0;
+                const kpiCard = document.createElement('div');
+                kpiCard.className = 'kpi-card';
+                kpiCard.innerHTML = `<div class="kpi-label">${person.name}</div><div class="kpi-value">${conversionRate}%</div><div class="kpi-label">Taxa de Conversão (${closedOffers}/${personOffers.length})</div>`;
+                kpiGrid.appendChild(kpiCard);
+            });
+        }
+
+        function renderKpiPage() {
+            const kpiGrid = document.getElementById('kpi-details-grid');
+            if (!kpiGrid) return; kpiGrid.innerHTML = '';
+            db.salesTeam.forEach(person => {
+                const personOffers = db.offers.filter(o => o.salesPersonId === person.id);
+                const totalValue = personOffers.reduce((sum, o) => sum + o.value, 0);
+                const avgDealSize = personOffers.length > 0 ? totalValue / personOffers.length : 0;
+                const closedOffers = personOffers.filter(o => o.status === 'fechado');
+                const conversionRate = personOffers.length > 0 ? (closedOffers.length / personOffers.length) * 100 : 0;
+                const card = document.createElement('div');
+                card.className = 'kpi-card';
+                card.innerHTML = `<h3 class="card-header">${person.name}</h3>
+                    <p class="kpi-label">Total de Propostas</p><p class="kpi-value">${personOffers.length}</p>
+                    <p class="kpi-label">Valor Total</p><p class="kpi-value">${formatCurrency(totalValue)}</p>
+                    <p class="kpi-label">Tamanho Médio do Negócio</p><p class="kpi-value">${formatCurrency(avgDealSize.toFixed(0))}</p>
+                    <p class="kpi-label">Taxa de Conversão</p><p class="kpi-value">${conversionRate.toFixed(1)}%</p>`;
+                kpiGrid.appendChild(card);
+            });
+        }
+
+        function openModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+        
+        window.handleEditOffer = (id) => {
+            const offer = getById(db.offers, id); if (!offer) return;
+            document.getElementById('editOfferId').value = offer.id;
+            document.getElementById('salesPersonSelect').value = offer.salesPersonId;
+            document.getElementById('customerSelect').value = offer.customerId;
+            document.getElementById('marketSelect').value = offer.market;
+            document.getElementById('offerValueInput').value = offer.value;
+            document.getElementById('offerDateInput').value = offer.offerDate;
+            document.getElementById('closingDateInput').value = offer.closingDate;
+            document.getElementById('reminderDateInput').value = offer.reminderDate;
+            document.getElementById('heatmapInput').value = offer.heatmap;
+            document.getElementById('statusSelect').value = offer.status;
+            document.getElementById('commentsInput').value = offer.comments;
+            openModal('offerModal');
+        };
+
+        window.handleEditSalesPerson = (id) => {
+            const person = getById(db.salesTeam, id); if (!person) return;
+            document.getElementById('editSalesPersonId').value = person.id;
+            document.getElementById('salesPersonName').value = person.name;
+            document.getElementById('salesPersonEmail').value = person.email;
+            openModal('salesPersonModal');
+        };
+
+        window.handleEditCustomer = (id) => {
+            const customer = getById(db.customers, id); if (!customer) return;
+            document.getElementById('editCustomerId').value = customer.id;
+            document.getElementById('customerName').value = customer.name;
+            document.getElementById('customerIndustry').value = customer.industry;
+            openModal('customerModal');
+        };
+
+        document.getElementById('offerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editOfferId').value;
+            const offerData = {
+                salesPersonId: document.getElementById('salesPersonSelect').value,
+                customerId: document.getElementById('customerSelect').value,
+                market: document.getElementById('marketSelect').value,
+                value: parseFloat(document.getElementById('offerValueInput').value),
+                offerDate: document.getElementById('offerDateInput').value,
+                closingDate: document.getElementById('closingDateInput').value,
+                reminderDate: document.getElementById('reminderDateInput').value,
+                heatmap: parseInt(document.getElementById('heatmapInput').value),
+                status: document.getElementById('statusSelect').value,
+                comments: document.getElementById('commentsInput').value,
+            };
+            try {
+                if (id) {
+                    await firestore.collection('offers').doc(id).update(offerData);
+                } else {
+                    offerData.offerNumber = generateOfferNumber();
+                    await firestore.collection('offers').add(offerData);
+                }
+                closeModal('offerModal');
+                showNotification('Proposta salva com sucesso!');
+                loadDb();
+            } catch (error) { showNotification('Erro ao salvar proposta.', true); console.error("Erro: ", error); }
+        });
+
+        document.getElementById('salesPersonForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editSalesPersonId').value;
+            const personData = { name: document.getElementById('salesPersonName').value, email: document.getElementById('salesPersonEmail').value };
+            try {
+                if (id) {
+                    await firestore.collection('salesTeam').doc(id).update(personData);
+                } else {
+                    await firestore.collection('salesTeam').add(personData);
+                }
+                closeModal('salesPersonModal');
+                showNotification('Vendedor salvo com sucesso!');
+                loadDb();
+            } catch (error) { showNotification('Erro ao salvar vendedor.', true); console.error(error); }
+        });
+
+        document.getElementById('customerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editCustomerId').value;
+            const customerData = { name: document.getElementById('customerName').value, industry: document.getElementById('customerIndustry').value };
+            try {
+                if (id) {
+                    await firestore.collection('customers').doc(id).update(customerData);
+                } else {
+                    await firestore.collection('customers').add(customerData);
+                }
+                closeModal('customerModal');
+                showNotification('Cliente salvo com sucesso!');
+                loadDb();
+            } catch (error) { showNotification('Erro ao salvar cliente.', true); console.error(error); }
+        });
+        
+        window.handleDelete = async (type, id) => {
+            if (!confirm(`Tem certeza que deseja apagar este item?`)) return;
+            const collectionName = (type === 'salesTeam' || type === 'customers') ? type : 'offers';
+            try {
+                 if (collectionName === 'salesTeam' && db.offers.some(o => o.salesPersonId === id)) {
+                    showNotification('Não é possível apagar vendedor com propostas existentes.', true); return;
+                }
+                if (collectionName === 'customers' && db.offers.some(o => o.customerId === id)) {
+                    showNotification('Não é possível apagar cliente com propostas existentes.', true); return;
+                }
+                await firestore.collection(collectionName).doc(id).delete();
+                showNotification('Item apagado com sucesso!');
+                loadDb();
+            } catch(error) { showNotification('Erro ao apagar item.', true); console.error(error); }
+        };
+
+        document.getElementById('exportXlsxBtn').addEventListener('click', () => {
+            const offersSheet = db.offers.map(o => ({
+                'Proposta #': o.offerNumber, 'Vendedor': getById(db.salesTeam, o.salesPersonId)?.name || 'N/A', 'Cliente': getById(db.customers, o.customerId)?.name || 'N/A', 'Mercado': o.market, 'Valor': o.value, 'Data da Proposta': o.offerDate, 'Data de Fechamento': o.closingDate, 'Heatmap': o.heatmap, 'Status': o.status, 'Lembrete': o.reminderDate, 'Comentários': o.comments
+            }));
+            const wb = XLSX.utils.book_new();
+            const wsOffers = XLSX.utils.json_to_sheet(offersSheet);
+            const wsSalesTeam = XLSX.utils.json_to_sheet(db.salesTeam.map(({id, ...rest}) => rest)); // Remove ID
+            const wsCustomers = XLSX.utils.json_to_sheet(db.customers.map(({id, ...rest}) => rest)); // Remove ID
+            XLSX.utils.book_append_sheet(wb, wsOffers, "Ofertas");
+            XLSX.utils.book_append_sheet(wb, wsSalesTeam, "Vendedores");
+            XLSX.utils.book_append_sheet(wb, wsCustomers, "Clientes");
+            XLSX.writeFile(wb, "crm_backup.xlsx");
+            showNotification("Backup em XLSX exportado!");
+        });
+
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            const dataStr = JSON.stringify(db, null, 2);
+            const blob = new Blob([dataStr], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'crm_backup.json'; a.click(); URL.revokeObjectURL(url);
+            showNotification('Backup em JSON exportado!');
+        });
+        
+        document.getElementById('importXlsxBtn').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file'; input.accept = '.xlsx, .xls';
+            input.onchange = e => {
+                const file = e.target.files[0]; const reader = new FileReader();
+                reader.onload = async (event) => {
+                    if (!confirm("Atenção: A importação irá APAGAR TODOS os dados existentes. Deseja continuar?")) return;
+                    try {
+                        showNotification("Iniciando importação..."); await clearAllData();
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const salesTeamData = XLSX.utils.sheet_to_json(workbook.Sheets['Vendedores']);
+                        const customersData = XLSX.utils.sheet_to_json(workbook.Sheets['Clientes']);
+                        const offersData = XLSX.utils.sheet_to_json(workbook.Sheets['Ofertas']);
+                        
+                        const salesTeamMap = {};
+                        for (const person of salesTeamData) {
+                            const docRef = await firestore.collection('salesTeam').add({ name: person.name, email: person.email });
+                            salesTeamMap[person.name] = docRef.id;
+                        }
+                        const customersMap = {};
+                        for (const customer of customersData) {
+                             const docRef = await firestore.collection('customers').add({ name: customer.name, industry: customer.industry });
+                             customersMap[customer.name] = docRef.id;
+                        }
+                        const batch = firestore.batch();
+                        offersData.forEach(offer => {
+                            const newOfferRef = firestore.collection('offers').doc();
+                            const offerPayload = {
+                                offerNumber: offer['Proposta #'], salesPersonId: salesTeamMap[offer['Vendedor']], customerId: customersMap[offer['Cliente']], market: offer['Mercado'], value: offer['Valor'], offerDate: offer['Data da Proposta'], closingDate: offer['Data de Fechamento'], heatmap: offer['Heatmap'], status: offer['Status'], reminderDate: offer['Lembrete'] || '', comments: offer['Comentários'] || ''
+                            };
+                            batch.set(newOfferRef, offerPayload);
+                        });
+                        await batch.commit();
+                        showNotification('Importação concluída com sucesso!'); loadDb();
+                    } catch (err) { showNotification('Erro na importação. Verifique o formato do arquivo e o console.', true); console.error("Erro de importação: ", err); }
+                };
+                reader.readAsArrayBuffer(file);
+            };
+            input.click();
+        });
+
+        // FIXED: clearCollection function
+        async function clearCollection(collectionName) {
+            try {
+                showNotification(`Limpando coleção ${collectionName}...`);
+                const snapshot = await firestore.collection(collectionName).get();
+                
+                // Firestore has a limit of 500 operations per batch
+                const batchSize = 400;
+                let processed = 0;
+                
+                while (processed < snapshot.size) {
+                    const batch = firestore.batch();
+                    const batchDocs = snapshot.docs.slice(processed, processed + batchSize);
+                    
+                    batchDocs.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    
+                    await batch.commit();
+                    processed += batchDocs.length;
+                    showNotification(`Processados ${processed} de ${snapshot.size} documentos em ${collectionName}...`);
+                }
+                
+                return true;
+            } catch (error) {
+                console.error(`Erro ao limpar a coleção ${collectionName}:`, error);
+                showNotification(`Erro ao limpar a coleção ${collectionName}. Verifique o console.`, true);
+                return false;
+            }
+        }
+
+        // FIXED: clearAllData function
+        async function clearAllData() {
+            showNotification("Limpando banco de dados...");
+            
+            try {
+                // Clear each collection sequentially to avoid Firestore limits
+                const results = await Promise.allSettled([
+                    clearCollection('offers'),
+                    clearCollection('customers'),
+                    clearCollection('salesTeam')
+                ]);
+                
+                // Check if all operations were successful
+                const allSuccess = results.every(result => result.status === 'fulfilled' && result.value === true);
+                
+                if (allSuccess) {
+                    showNotification('Todos os dados foram apagados com sucesso!');
+                } else {
+                    showNotification('Alguns dados podem não ter sido completamente apagados. Verifique o console.', true);
+                }
+                
+                // Reload the database to reflect changes
+                loadDb();
+            } catch (error) {
+                console.error("Erro ao limpar o banco de dados: ", error);
+                showNotification('Erro ao limpar o banco de dados.', true);
+            }
+        }
+
+        document.getElementById('clearDbBtn').addEventListener('click', async () => {
+            if (confirm('TEM CERTEZA ABSOLUTA? Esta ação apagará TODOS os dados no banco de dados da nuvem PERMANENTEMENTE.')) {
+                await clearAllData();
+            }
+        });
+        
+        // --- INICIALIZAÇÃO E EVENT LISTENERS RESTAURADOS ---
+        document.getElementById('addOfferBtn').addEventListener('click', () => { 
+            document.getElementById('offerForm').reset();
+            document.getElementById('editOfferId').value = '';
+            openModal('offerModal');
+        });
+        document.getElementById('addSalesPersonBtn').addEventListener('click', () => { 
+            document.getElementById('salesPersonForm').reset();
+            document.getElementById('editSalesPersonId').value = '';
+            openModal('salesPersonModal');
+        });
+        document.getElementById('addCustomerBtn').addEventListener('click', () => { 
+            document.getElementById('customerForm').reset();
+            document.getElementById('editCustomerId').value = '';
+            openModal('customerModal');
+        });
+        
+        document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', () => closeModal(btn.closest('.modal').id)));
+        
+        document.querySelectorAll('.filter-select').forEach(sel => sel.addEventListener('change', renderOffersTable));
+
+        document.querySelectorAll('#offersTable th[data-sort]').forEach(headerCell => {
+            headerCell.addEventListener('click', () => {
+                const column = headerCell.dataset.sort;
+                if (sortState.column === column) {
+                    sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortState.column = column;
+                    sortState.direction = 'asc';
+                }
+                renderOffersTable();
+            });
+        });
+
+        document.querySelectorAll('.menu-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetLink = e.currentTarget;
+                const tabId = targetLink.dataset.tab;
+                document.querySelectorAll('.tab-content.active').forEach(tc => tc.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+                document.querySelectorAll('.menu-link.active').forEach(ml => ml.classList.remove('active'));
+                targetLink.classList.add('active');
+                document.querySelector('.page-title').textContent = targetLink.textContent.trim();
+                if (window.innerWidth <= 992) document.getElementById('sidebar').classList.remove('active');
+            });
+        });
+        
+        document.querySelectorAll('.tabs .tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const subtabId = e.target.dataset.subtab;
+                const parent = e.target.closest('.tab-content');
+                parent.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                parent.querySelector(`#${subtabId}`).classList.add('active');
+                parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+        
+        document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('active');
+        });
+
+        async function exportElementToPdf(elementId, fileName) {
+            const { jsPDF } = window.jspdf;
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            showNotification('Gerando PDF...');
+            const canvas = await html2canvas(element, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [canvas.width, canvas.height] });
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(fileName);
+            showNotification('PDF exportado com sucesso!');
+        }
+        
+        document.getElementById('exportKpisPdf').addEventListener('click', () => exportElementToPdf('kpis', 'relatorio_kpis.pdf'));
+        document.getElementById('exportReportsPdf').addEventListener('click', () => exportElementToPdf('reports', 'relatorios_vendas.pdf'));
+        
+        loadDb();
+    });
+</script>
+</body>
+</html>
